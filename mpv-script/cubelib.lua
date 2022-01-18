@@ -206,6 +206,7 @@ for _, d in ipairs({"U", "L", "F", "R", "B", "D"}) do
   for _, d2 in ipairs({"", "'", "2"}) do
     for i = 1, 54 do
       assert(rotate_sticker(i, d .. d2) ~= nil)
+      assert(rotate_sticker(i, d:lower() .. d2) ~= nil)
     end
   end
 end
