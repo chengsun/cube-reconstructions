@@ -200,6 +200,8 @@ assert(rotate_sticker(37, "U") == 28)
 assert(rotate_sticker(40, "u2") == 22)
 assert(rotate_sticker(43, "D") == 16)
 assert(rotate_sticker(14, "d") == 23)
+assert(rotate_sticker(40, "B") == 38)
+assert(rotate_sticker(1, "B") == 16)
 for _, d in ipairs({"U", "L", "F", "R", "B", "D"}) do
   for _, d2 in ipairs({"", "'", "2"}) do
     for i = 1, 54 do
