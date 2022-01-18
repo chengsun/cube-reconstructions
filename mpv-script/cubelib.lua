@@ -1,4 +1,4 @@
--- a permutation is a shuffle of sticker ids. sticker ids:
+-- sticker ids:
 --
 --             U: 1  2  3
 --                4  5  6
@@ -12,8 +12,26 @@
 --               49 50 51
 --               52 53 54
 --
--- orientations:
+--
+-- local coordinates:
+--
+--   -1,+1   0,+1  +1,+1
+--   -1, 0   0, 0  +1, 0
+--   -1,-1   0,-1  +1,-1
+--
+-- global (cube) coordinates follow a left-handed system:
+-- x increases to the right
+-- y increases to the up
+-- z increases to the back
+-- (0,0,0) is the center of the cube
+--
+-- face strings and face IDs:
 -- 1 = U, 2 = L, 3 = F, 4 = R, 5 = B, 6 = D
+
+function divmod(n, d)
+  local mod = n % d
+  return math.floor((n - mod) / d), mod
+end
 
 function face_id_of_sticker_id(sticker_id)
   return math.floor((sticker_id - 1) / 9) + 1
@@ -24,84 +42,88 @@ function face_local_id_of_sticker_id(sticker_id)
 end
 
 function face_local_coord_of_face_local_id(face_local_id)
-  return (face_local_id - 1) % 3 + 1, math.floor((face_local_id - 1) / 3) + 1
+  local y, x = divmod(face_local_id - 1, 3)
+  return x - 1, 1 - y
 end
 
-function sticker_id_of_face_id_and_face_local_coord(face_id, face_local_x, face_local_y)
-  return face_id * 9 + face_local_y * 3 + face_local_x
+function face_local_id_of_face_local_coord(local_x, local_y)
+  return (1 - local_y) * 3 + local_x + 2
+end
+
+for local_id = 1, 9 do
+  local local_x, local_y = face_local_coord_of_face_local_id(local_id)
+  assert(local_id == face_local_id_of_face_local_coord(local_x, local_y))
 end
 
 function coord_of_face_id_and_face_local_coord(face_id, face_local_x, face_local_y)
   if face_id == 1 then return { face_local_x, 1, face_local_y } -- U
-  elseif face_id == 2 then return { 1, face_local_y, face_local_x } -- L
-  elseif face_id == 3 then return { face_local_x, face_local_y, 3 } -- F
-  elseif face_id == 4 then return { 3, face_local_y, 4 - face_local_x } -- R
-  elseif face_id == 5 then return { 4 - face_local_x, face_local_y, 1 } -- B
-  elseif face_id == 6 then return { face_local_x, 3, 4 - face_local_y } -- D
+  elseif face_id == 2 then return { -1, face_local_y, -face_local_x } -- L
+  elseif face_id == 3 then return { face_local_x, face_local_y, -1 } -- F
+  elseif face_id == 4 then return { 1, face_local_y, face_local_x } -- R
+  elseif face_id == 5 then return { -face_local_x, face_local_y, 1 } -- B
+  elseif face_id == 6 then return { face_local_x, -1, -face_local_y } -- D
   else assert(false)
   end
 end
 
-function face_local_x_and_y_of_face_id_and_coord(face_id, coord)
-  if face_id == 1 then return coord[1], coord[2]
-  elseif face_id == 2 then return coord[3], coord[2]
-  elseif face_id == 3 then return coord[1], coord[2]
-  elseif face_id == 4 then return 4 - coord[3], coord[2]
-  elseif face_id == 5 then return 4 - coord[1], coord[2]
-  elseif face_id == 6 then return coord[1], 4 - coord[3]
-  else assert(false)
-  end
+function coord_of_id(id)
+  local yz, x = divmod(id - 1, 3)
+  local z, y = divmod(yz, 3)
+  return {x - 1, y - 1, z - 1}
+end
+
+function id_of_coord(coord)
+  return (coord[3] + 1) * 9 + (coord[2] + 1) * 3 + coord[1] + 2
+end
+
+for id = 1, 27 do
+  local coord = coord_of_id(id)
+  assert (math.abs(coord[1]) <= 1 and math.abs(coord[2]) <= 1 and math.abs(coord[3]) <= 1)
+  assert(id == id_of_coord(coord))
 end
 
 local coord_of_sticker_id = {}
-local _sticker_id_of_coord_and_face_id = {}
+local _sticker_id_of_coord_id_and_face_id = {}
 for sticker_id = 1, 54 do
   face_id = face_id_of_sticker_id(sticker_id)
   face_local_x, face_local_y = face_local_coord_of_face_local_id(face_local_id_of_sticker_id(sticker_id))
   local coord = coord_of_face_id_and_face_local_coord(face_id, face_local_x, face_local_y)
   coord_of_sticker_id[sticker_id] = coord
-  _sticker_id_of_coord_and_face_id[coord[1]] = _sticker_id_of_coord_and_face_id[coord[1]] or {}
-  _sticker_id_of_coord_and_face_id[coord[1]][coord[2]] = _sticker_id_of_coord_and_face_id[coord[1]][coord[2]] or {}
-  _sticker_id_of_coord_and_face_id[coord[1]][coord[2]][coord[3]] = _sticker_id_of_coord_and_face_id[coord[1]][coord[2]][coord[3]] or {}
-  _sticker_id_of_coord_and_face_id[coord[1]][coord[2]][coord[3]][face_id] = sticker_id
+  local coord_id = id_of_coord(coord)
+  _sticker_id_of_coord_id_and_face_id[coord_id] = _sticker_id_of_coord_id_and_face_id[coord_id] or {}
+  _sticker_id_of_coord_id_and_face_id[coord_id][face_id] = sticker_id
 end
 
 function sticker_id_of_coord_and_face_id(coord, face_id)
-  return _sticker_id_of_coord_and_face_id[coord[1]][coord[2]][coord[3]][face_id]
-end
-
--- face_local_id_permutation[n][i] represents which index i ends up at after n
--- clockwise turns
-face_local_id_permutation = {{ 3, 6, 9, 2, 5, 8, 1, 4, 7 }}
-for n = 2, 3 do
-  face_local_id_permutation[n] = {}
-  for i = 1, 9 do
-    face_local_id_permutation[n][i] =
-      face_local_id_permutation[n - 1][face_local_id_permutation[1][i]]
-  end
+  return _sticker_id_of_coord_id_and_face_id[id_of_coord(coord)][face_id]
 end
 
 function face_normal_of_face_id(face_id)
-  if face_id == 1 then return { 0, -1,  0} -- U
-  elseif face_id == 2 then return {-1,  0,  0} -- L
-  elseif face_id == 3 then return { 0,  0,  1} -- F
-  elseif face_id == 4 then return { 1,  0,  0} -- R
-  elseif face_id == 5 then return { 0,  0, -1} -- B
-  elseif face_id == 6 then return { 0,  1,  0} -- D
-  else assert(false)
-  end
+  return coord_of_face_id_and_face_local_coord(face_id, 0, 0)
 end
 
 function face_id_of_face_normal(face_normal)
   assert(math.abs(face_normal[1]) + math.abs(face_normal[2]) + math.abs(face_normal[3]) == 1)
-  if face_normal[2] == -1 then return 1
+  if face_normal[2] == 1 then return 1
   elseif face_normal[1] == -1 then return 2
-  elseif face_normal[3] == 1 then return 3
+  elseif face_normal[3] == -1 then return 3
   elseif face_normal[1] == 1 then return 4
-  elseif face_normal[3] == -1 then return 5
-  elseif face_normal[2] == 1 then return 6
+  elseif face_normal[3] == 1 then return 5
+  elseif face_normal[2] == -1 then return 6
   else assert(false)
   end
+end
+
+for face_id = 1, 6 do
+  local face_normal = face_normal_of_face_id(face_id)
+  assert(math.abs(face_normal[1]) + math.abs(face_normal[2]) + math.abs(face_normal[3]) == 1)
+  assert(face_id == face_id_of_face_normal(face_normal))
+end
+
+local face_string_of_face_id = {"U", "L", "F", "R", "B", "D"}
+local face_id_of_face_string = {}
+for face_id, face_string in ipairs(face_string_of_face_id) do
+  face_id_of_face_string[face_string] = face_id
 end
 
 function rotate_cw(normal, coord)
@@ -109,14 +131,6 @@ function rotate_cw(normal, coord)
     coord[3]*normal[2] - coord[2]*normal[3] + coord[1]*math.abs(normal[1]),
     coord[1]*normal[3] - coord[3]*normal[1] + coord[2]*math.abs(normal[2]),
     coord[2]*normal[1] - coord[1]*normal[2] + coord[3]*math.abs(normal[3])}
-end
-
-function rotate_cw_coord(normal, coord)
-  local normalised_coord = {coord[1] - 2, coord[2] - 2, coord[3] - 2}
-  local normalised_rotated_coord = rotate_cw(normal, normalised_coord)
-  return {normalised_rotated_coord[1] + 2,
-          normalised_rotated_coord[2] + 2,
-          normalised_rotated_coord[3] + 2}
 end
 
 function rotate_sticker(sticker_id, move_string)
@@ -128,14 +142,7 @@ function rotate_sticker(sticker_id, move_string)
     move_char = move_char:upper()
   end
   local move_face_id
-  if move_char == "U" then move_face_id = 1
-  elseif move_char == "L" then move_face_id = 2
-  elseif move_char == "F" then move_face_id = 3
-  elseif move_char == "R" then move_face_id = 4
-  elseif move_char == "B" then move_face_id = 5
-  elseif move_char == "D" then move_face_id = 6
-  else assert(false)
-  end
+  move_face_id = face_id_of_face_string[move_char]
   local move_repetitions = 1
   if #move_string > 1 then
     if move_string:sub(2,2) == "2" then
@@ -153,30 +160,21 @@ function rotate_sticker(sticker_id, move_string)
     return math.abs(x - y)
   end
   if (move_face_id == 1 and distance(coord[2], 1) < move_width)
-    or (move_face_id == 2 and distance(coord[1], 1) < move_width)
-    or (move_face_id == 3 and distance(coord[3], 3) < move_width)
-    or (move_face_id == 4 and distance(coord[1], 3) < move_width)
+    or (move_face_id == 2 and distance(coord[1], -1) < move_width)
+    or (move_face_id == 3 and distance(coord[3], -1) < move_width)
+    or (move_face_id == 4 and distance(coord[1], 1) < move_width)
     or (move_face_id == 5 and distance(coord[3], 1) < move_width)
-    or (move_face_id == 6 and distance(coord[2], 3) < move_width)
+    or (move_face_id == 6 and distance(coord[2], -1) < move_width)
   then
     local normal = face_normal_of_face_id(face_id_of_sticker_id(sticker_id))
     for _ = 1, move_repetitions do
-      coord = rotate_cw_coord(rotation_normal, coord)
+      coord = rotate_cw(rotation_normal, coord)
       normal = rotate_cw(rotation_normal, normal)
     end
     return sticker_id_of_coord_and_face_id(coord, face_id_of_face_normal(normal))
   else
     return sticker_id
   end
-
-end
-
-function permutation_identity()
-  local permutation = {}
-  for i = 1, 6 * 3 * 3 do
-    permutation[i] = i
-  end
-  return permutation
 end
 
 assert(rotate_sticker(1, "R") == 1)
