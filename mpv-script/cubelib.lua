@@ -73,12 +73,12 @@ function coord_of_id(id)
 end
 
 function id_of_coord(coord)
+  assert (math.abs(coord[1]) <= 1 and math.abs(coord[2]) <= 1 and math.abs(coord[3]) <= 1)
   return (coord[3] + 1) * 9 + (coord[2] + 1) * 3 + coord[1] + 2
 end
 
 for id = 1, 27 do
   local coord = coord_of_id(id)
-  assert (math.abs(coord[1]) <= 1 and math.abs(coord[2]) <= 1 and math.abs(coord[3]) <= 1)
   assert(id == id_of_coord(coord))
 end
 
@@ -101,23 +101,12 @@ end
 function face_normal_of_face_id(face_id)
   return coord_of_face_id_and_face_local_coord(face_id, 0, 0)
 end
-
-function face_id_of_face_normal(face_normal)
-  assert(math.abs(face_normal[1]) + math.abs(face_normal[2]) + math.abs(face_normal[3]) == 1)
-  if face_normal[2] == 1 then return 1
-  elseif face_normal[1] == -1 then return 2
-  elseif face_normal[3] == -1 then return 3
-  elseif face_normal[1] == 1 then return 4
-  elseif face_normal[3] == 1 then return 5
-  elseif face_normal[2] == -1 then return 6
-  else assert(false)
-  end
-end
-
+local _face_id_of_face_normal = {}
 for face_id = 1, 6 do
-  local face_normal = face_normal_of_face_id(face_id)
-  assert(math.abs(face_normal[1]) + math.abs(face_normal[2]) + math.abs(face_normal[3]) == 1)
-  assert(face_id == face_id_of_face_normal(face_normal))
+  _face_id_of_face_normal[id_of_coord(face_normal_of_face_id(face_id))] = face_id
+end
+function face_id_of_face_normal(face_normal)
+  return _face_id_of_face_normal[id_of_coord(face_normal)]
 end
 
 local face_string_of_face_id = {"U", "L", "F", "R", "B", "D"}
