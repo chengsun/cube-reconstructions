@@ -63,6 +63,7 @@ function face_local_coord_of_face_local_id(face_local_id)
 end
 
 function face_local_id_of_face_local_coord(local_x, local_y)
+  assert (math.abs(local_x) <= 1 and math.abs(local_y) <= 1)
   return (1 - local_y) * 3 + local_x + 2
 end
 
@@ -94,16 +95,20 @@ function coord_of_face_id_and_face_local_coord(face_id, face_local_x, face_local
   end
 end
 
-local coord_of_sticker_id = {}
+local _coord_of_sticker_id = {}
 local _sticker_id_of_coord_id_and_face_id = {}
 for sticker_id = 1, 54 do
   face_id = face_id_of_sticker_id(sticker_id)
   face_local_x, face_local_y = face_local_coord_of_face_local_id(face_local_id_of_sticker_id(sticker_id))
   local coord = coord_of_face_id_and_face_local_coord(face_id, face_local_x, face_local_y)
-  coord_of_sticker_id[sticker_id] = coord
+  _coord_of_sticker_id[sticker_id] = coord
   local coord_id = id_of_coord(coord)
   _sticker_id_of_coord_id_and_face_id[coord_id] = _sticker_id_of_coord_id_and_face_id[coord_id] or {}
   _sticker_id_of_coord_id_and_face_id[coord_id][face_id] = sticker_id
+end
+
+function coord_of_sticker_id(sticker_id)
+  return _coord_of_sticker_id[sticker_id]
 end
 
 function sticker_id_of_coord_and_face_id(coord, face_id)
@@ -117,10 +122,12 @@ end
 function face_normal_of_face_id(face_id)
   return coord_of_face_id_and_face_local_coord(face_id, 0, 0)
 end
+
 local _face_id_of_face_normal = {}
 for face_id = 1, 6 do
   _face_id_of_face_normal[id_of_coord(face_normal_of_face_id(face_id))] = face_id
 end
+
 function face_id_of_face_normal(face_normal)
   return _face_id_of_face_normal[id_of_coord(face_normal)]
 end
@@ -129,10 +136,18 @@ end
 -- face ID <-> face string
 --------------------------------------------------------------------------------
 
-local face_string_of_face_id = {"U", "L", "F", "R", "B", "D"}
-local face_id_of_face_string = {}
-for face_id, face_string in ipairs(face_string_of_face_id) do
-  face_id_of_face_string[face_string] = face_id
+local _face_string_of_face_id = {"U", "L", "F", "R", "B", "D"}
+local _face_id_of_face_string = {}
+for face_id, face_string in ipairs(_face_string_of_face_id) do
+  _face_id_of_face_string[face_string] = face_id
+end
+
+function face_string_of_face_id(face_id)
+  return _face_string_of_face_id[face_id]
+end
+
+function face_id_of_face_string(face_string)
+  return _face_id_of_face_string[face_string]
 end
 
 --------------------------------------------------------------------------------
@@ -159,7 +174,7 @@ function rotate_sticker(sticker_id, move_string)
     move_char = move_char:upper()
   end
   local move_face_id
-  move_face_id = face_id_of_face_string[move_char]
+  move_face_id = face_id_of_face_string(move_char)
   local move_repetitions = 1
   if #move_string > 1 then
     if move_string:sub(2,2) == "2" then
@@ -172,7 +187,7 @@ function rotate_sticker(sticker_id, move_string)
 
   -- apply move
   local rotation_normal = face_normal_of_face_id(move_face_id)
-  local coord = coord_of_sticker_id[sticker_id]
+  local coord = coord_of_sticker_id(sticker_id)
   function distance(x, y)
     return math.abs(x - y)
   end
@@ -224,4 +239,28 @@ for _, d in ipairs({"U", "L", "F", "R", "B", "D"}) do
   end
 end
 
-return "hi"
+--------------------------------------------------------------------------------
+-- public interface
+--------------------------------------------------------------------------------
+
+return {
+  coord_of_id = coord_of_id,
+  id_of_coord = id_of_coord,
+
+  face_local_coord_of_face_local_id = face_local_coord_of_face_local_id,
+  face_local_id_of_face_local_coord = face_local_id_of_face_local_coord,
+
+  face_id_of_sticker_id = face_id_of_sticker_id,
+  face_local_id_of_sticker_id = face_local_id_of_sticker_id,
+  coord_of_face_id_and_face_local_coord = coord_of_face_id_and_face_local_coord,
+  coord_of_sticker_id = coord_of_sticker_id,
+  sticker_id_of_coord_and_face_id = sticker_id_of_coord_and_face_id,
+
+  face_normal_of_face_id = face_normal_of_face_id,
+  face_id_of_face_normal = face_id_of_face_normal,
+
+  face_string_of_face_id = face_string_of_face_id,
+  face_id_of_face_string = face_id_of_face_string,
+
+  rotate_sticker = rotate_sticker,
+}
