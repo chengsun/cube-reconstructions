@@ -133,6 +133,10 @@ function rotate_cw(normal, coord)
     coord[2]*normal[1] - coord[1]*normal[2] + coord[3]*math.abs(normal[3])}
 end
 
+function dot_product(coord1, coord2)
+  return (coord1[1] * coord2[1] + coord1[2] * coord2[2] + coord1[3] * coord2[3])
+end
+
 function rotate_sticker(sticker_id, move_string)
   -- parse move string
   local move_char = move_string:sub(1,1)
@@ -159,12 +163,8 @@ function rotate_sticker(sticker_id, move_string)
   function distance(x, y)
     return math.abs(x - y)
   end
-  if (move_face_id == 1 and distance(coord[2], 1) < move_width)
-    or (move_face_id == 2 and distance(coord[1], -1) < move_width)
-    or (move_face_id == 3 and distance(coord[3], -1) < move_width)
-    or (move_face_id == 4 and distance(coord[1], 1) < move_width)
-    or (move_face_id == 5 and distance(coord[3], 1) < move_width)
-    or (move_face_id == 6 and distance(coord[2], -1) < move_width)
+  local distance_from_rotation_face = 1 - dot_product(face_normal_of_face_id(move_face_id), coord)
+  if distance_from_rotation_face < move_width
   then
     local normal = face_normal_of_face_id(face_id_of_sticker_id(sticker_id))
     for _ = 1, move_repetitions do
