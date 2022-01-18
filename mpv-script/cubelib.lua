@@ -240,6 +240,78 @@ for _, d in ipairs({"U", "L", "F", "R", "B", "D"}) do
 end
 
 --------------------------------------------------------------------------------
+-- sticker permutation
+--------------------------------------------------------------------------------
+
+local Permutation = {}
+Permutation.__index = Permutation
+
+function Permutation.new(o)
+  o = o or {}
+  setmetatable(o, Permutation)
+  for i = 1, 54 do
+    o[i] = i
+  end
+  return o
+end
+
+function Permutation:invariant()
+  seen = {}
+  for i = 1, 54 do
+    assert(1 <= self[i] and self[i] <= 54)
+    assert(not seen[self[i]])
+    seen[self[i]] = true
+  end
+end
+
+function Permutation:clone()
+  o = {}
+  setmetatable(o, Permutation)
+  for i = 1, 54 do
+    assert(1 <= self[i] and self[i] <= 54)
+    o[i] = self[i]
+  end
+  return o
+end
+
+function Permutation.__mul(first, second)
+  o = {}
+  setmetatable(o, Permutation)
+  for i = 1, 54 do
+    o[i] = second[first[i]]
+  end
+  return o
+end
+
+function Permutation.__eq(first, second)
+  for i = 1, 54 do
+    if first[i] ~= second[i] then return false end
+  end
+  return true
+end
+
+local _permutation_of_move_string = {}
+for _, d in ipairs({"U", "L", "F", "R", "B", "D"}) do
+  for _, d2 in ipairs({"", "'", "2"}) do
+    function f(move_string)
+      _permutation_of_move_string[move_string] = Permutation.new()
+      for i = 1, 54 do
+        _permutation_of_move_string[move_string][i] = rotate_sticker(i, move_string)
+      end
+      _permutation_of_move_string[move_string]:invariant()
+    end
+    f(d .. d2)
+    f(d:lower() .. d2)
+  end
+end
+
+function Permutation.of_move_string(move_string)
+  return _permutation_of_move_string[move_string]
+end
+
+assert(Permutation.of_move_string("F") * Permutation.of_move_string("F'") == Permutation.new())
+
+--------------------------------------------------------------------------------
 -- public interface
 --------------------------------------------------------------------------------
 
@@ -263,4 +335,6 @@ return {
   face_id_of_face_string = face_id_of_face_string,
 
   rotate_sticker = rotate_sticker,
+
+  Permutation = Permutation,
 }
