@@ -33,38 +33,9 @@ function divmod(n, d)
   return math.floor((n - mod) / d), mod
 end
 
-function face_id_of_sticker_id(sticker_id)
-  return math.floor((sticker_id - 1) / 9) + 1
-end
-
-function face_local_id_of_sticker_id(sticker_id)
-  return ((sticker_id - 1) % 9) + 1
-end
-
-function face_local_coord_of_face_local_id(face_local_id)
-  local y, x = divmod(face_local_id - 1, 3)
-  return x - 1, 1 - y
-end
-
-function face_local_id_of_face_local_coord(local_x, local_y)
-  return (1 - local_y) * 3 + local_x + 2
-end
-
-for local_id = 1, 9 do
-  local local_x, local_y = face_local_coord_of_face_local_id(local_id)
-  assert(local_id == face_local_id_of_face_local_coord(local_x, local_y))
-end
-
-function coord_of_face_id_and_face_local_coord(face_id, face_local_x, face_local_y)
-  if face_id == 1 then return { face_local_x, 1, face_local_y } -- U
-  elseif face_id == 2 then return { -1, face_local_y, -face_local_x } -- L
-  elseif face_id == 3 then return { face_local_x, face_local_y, -1 } -- F
-  elseif face_id == 4 then return { 1, face_local_y, face_local_x } -- R
-  elseif face_id == 5 then return { -face_local_x, face_local_y, 1 } -- B
-  elseif face_id == 6 then return { face_local_x, -1, -face_local_y } -- D
-  else assert(false)
-  end
-end
+--------------------------------------------------------------------------------
+-- [-1, +1]^3 coord <-> [1, 27] coord ID
+--------------------------------------------------------------------------------
 
 function coord_of_id(id)
   local yz, x = divmod(id - 1, 3)
@@ -80,6 +51,47 @@ end
 for id = 1, 27 do
   local coord = coord_of_id(id)
   assert(id == id_of_coord(coord))
+end
+
+--------------------------------------------------------------------------------
+-- [-1, +1]^2 face local coord <-> [1, 9] face local ID
+--------------------------------------------------------------------------------
+
+function face_local_coord_of_face_local_id(face_local_id)
+  local y, x = divmod(face_local_id - 1, 3)
+  return x - 1, 1 - y
+end
+
+function face_local_id_of_face_local_coord(local_x, local_y)
+  return (1 - local_y) * 3 + local_x + 2
+end
+
+for local_id = 1, 9 do
+  local local_x, local_y = face_local_coord_of_face_local_id(local_id)
+  assert(local_id == face_local_id_of_face_local_coord(local_x, local_y))
+end
+
+--------------------------------------------------------------------------------
+-- (global coord, face ID) <-> sticker ID
+--------------------------------------------------------------------------------
+
+function face_id_of_sticker_id(sticker_id)
+  return math.floor((sticker_id - 1) / 9) + 1
+end
+
+function face_local_id_of_sticker_id(sticker_id)
+  return ((sticker_id - 1) % 9) + 1
+end
+
+function coord_of_face_id_and_face_local_coord(face_id, face_local_x, face_local_y)
+  if face_id == 1 then return { face_local_x, 1, face_local_y } -- U
+  elseif face_id == 2 then return { -1, face_local_y, -face_local_x } -- L
+  elseif face_id == 3 then return { face_local_x, face_local_y, -1 } -- F
+  elseif face_id == 4 then return { 1, face_local_y, face_local_x } -- R
+  elseif face_id == 5 then return { -face_local_x, face_local_y, 1 } -- B
+  elseif face_id == 6 then return { face_local_x, -1, -face_local_y } -- D
+  else assert(false)
+  end
 end
 
 local coord_of_sticker_id = {}
@@ -98,6 +110,10 @@ function sticker_id_of_coord_and_face_id(coord, face_id)
   return _sticker_id_of_coord_id_and_face_id[id_of_coord(coord)][face_id]
 end
 
+--------------------------------------------------------------------------------
+-- face ID <-> face normal
+--------------------------------------------------------------------------------
+
 function face_normal_of_face_id(face_id)
   return coord_of_face_id_and_face_local_coord(face_id, 0, 0)
 end
@@ -109,11 +125,19 @@ function face_id_of_face_normal(face_normal)
   return _face_id_of_face_normal[id_of_coord(face_normal)]
 end
 
+--------------------------------------------------------------------------------
+-- face ID <-> face string
+--------------------------------------------------------------------------------
+
 local face_string_of_face_id = {"U", "L", "F", "R", "B", "D"}
 local face_id_of_face_string = {}
 for face_id, face_string in ipairs(face_string_of_face_id) do
   face_id_of_face_string[face_string] = face_id
 end
+
+--------------------------------------------------------------------------------
+-- sticker rotation
+--------------------------------------------------------------------------------
 
 function rotate_cw(normal, coord)
   return {
@@ -199,7 +223,5 @@ for _, d in ipairs({"U", "L", "F", "R", "B", "D"}) do
     end
   end
 end
-
-
 
 return "hi"
