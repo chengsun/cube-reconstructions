@@ -170,8 +170,8 @@ function rotate_sticker(sticker_id, move_string)
     end
   end
 
+  -- apply move
   local rotation_normal = face_normal_of_face_id(move_face_id)
-
   local coord = coord_of_sticker_id[sticker_id]
   function distance(x, y)
     return math.abs(x - y)
