@@ -274,6 +274,16 @@ function Permutation:clone()
   return o
 end
 
+function Permutation:invert()
+  o = {}
+  setmetatable(o, Permutation)
+  for i = 1, 54 do
+    assert(o[self[i]] == nil)
+    o[self[i]] = i
+  end
+  return o
+end
+
 function Permutation.__mul(first, second)
   o = {}
   setmetatable(o, Permutation)
@@ -310,6 +320,7 @@ function Permutation.of_move_string(move_string)
 end
 
 assert(Permutation.of_move_string("F") * Permutation.of_move_string("F'") == Permutation.new())
+assert(Permutation.of_move_string("F"):invert() == Permutation.of_move_string("F'"))
 
 --------------------------------------------------------------------------------
 -- public interface
