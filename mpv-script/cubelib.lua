@@ -301,7 +301,8 @@ function Permutation.__eq(first, second)
 end
 
 local _permutation_of_move_string = {}
-for _, d in ipairs({"U", "L", "F", "R", "B", "D"}) do
+for face_id = 1, 6 do
+  face_string = face_string_of_face_id(face_id)
   for _, d2 in ipairs({"", "'", "2"}) do
     function f(move_string)
       _permutation_of_move_string[move_string] = Permutation.new()
@@ -310,8 +311,8 @@ for _, d in ipairs({"U", "L", "F", "R", "B", "D"}) do
       end
       _permutation_of_move_string[move_string]:invariant()
     end
-    f(d .. d2)
-    f(d:lower() .. d2)
+    f(face_string .. d2)
+    f(face_string:lower() .. d2)
   end
 end
 
@@ -319,8 +320,12 @@ function Permutation.of_move_string(move_string)
   return _permutation_of_move_string[move_string]
 end
 
-assert(Permutation.of_move_string("F") * Permutation.of_move_string("F'") == Permutation.new())
-assert(Permutation.of_move_string("F"):invert() == Permutation.of_move_string("F'"))
+for face_id = 1, 6 do
+  face_string = face_string_of_face_id(face_id)
+  assert(Permutation.of_move_string(face_string) * Permutation.of_move_string(face_string .. "'") == Permutation.new())
+  assert(Permutation.of_move_string(face_string):invert() == Permutation.of_move_string(face_string .. "'"))
+  assert(Permutation.of_move_string(face_string) * Permutation.of_move_string(face_string) == Permutation.of_move_string(face_string .. "2"))
+end
 
 --------------------------------------------------------------------------------
 -- public interface
