@@ -28,7 +28,7 @@
 -- face strings and face IDs:
 -- 1 = U, 2 = L, 3 = F, 4 = R, 5 = B, 6 = D
 
-function divmod(n, d)
+local function divmod(n, d)
   local mod = n % d
   return math.floor((n - mod) / d), mod
 end
@@ -37,13 +37,13 @@ end
 -- [-1, +1]^3 coord <-> [1, 27] coord ID
 --------------------------------------------------------------------------------
 
-function coord_of_id(id)
+local function coord_of_id(id)
   local yz, x = divmod(id - 1, 3)
   local z, y = divmod(yz, 3)
   return {x - 1, y - 1, z - 1}
 end
 
-function id_of_coord(coord)
+local function id_of_coord(coord)
   assert (math.abs(coord[1]) <= 1 and math.abs(coord[2]) <= 1 and math.abs(coord[3]) <= 1)
   return (coord[3] + 1) * 9 + (coord[2] + 1) * 3 + coord[1] + 2
 end
@@ -57,12 +57,12 @@ end
 -- [-1, +1]^2 face local coord <-> [1, 9] face local ID
 --------------------------------------------------------------------------------
 
-function face_local_coord_of_face_local_id(face_local_id)
+local function face_local_coord_of_face_local_id(face_local_id)
   local y, x = divmod(face_local_id - 1, 3)
   return x - 1, 1 - y
 end
 
-function face_local_id_of_face_local_coord(local_x, local_y)
+local function face_local_id_of_face_local_coord(local_x, local_y)
   assert (math.abs(local_x) <= 1 and math.abs(local_y) <= 1)
   return (1 - local_y) * 3 + local_x + 2
 end
@@ -76,15 +76,15 @@ end
 -- (global coord, face ID) <-> net ID
 --------------------------------------------------------------------------------
 
-function face_id_of_net_id(net_id)
+local function face_id_of_net_id(net_id)
   return math.floor((net_id - 1) / 9) + 1
 end
 
-function face_local_id_of_net_id(net_id)
+local function face_local_id_of_net_id(net_id)
   return ((net_id - 1) % 9) + 1
 end
 
-function coord_of_face_id_and_face_local_coord(face_id, face_local_x, face_local_y)
+local function coord_of_face_id_and_face_local_coord(face_id, face_local_x, face_local_y)
   if face_id == 1 then return { face_local_x, 1, face_local_y } -- U
   elseif face_id == 2 then return { -1, face_local_y, -face_local_x } -- L
   elseif face_id == 3 then return { face_local_x, face_local_y, -1 } -- F
@@ -98,8 +98,8 @@ end
 local _coord_of_net_id = {}
 local _net_id_of_coord_id_and_face_id = {}
 for net_id = 1, 54 do
-  face_id = face_id_of_net_id(net_id)
-  face_local_x, face_local_y = face_local_coord_of_face_local_id(face_local_id_of_net_id(net_id))
+  local face_id = face_id_of_net_id(net_id)
+  local face_local_x, face_local_y = face_local_coord_of_face_local_id(face_local_id_of_net_id(net_id))
   local coord = coord_of_face_id_and_face_local_coord(face_id, face_local_x, face_local_y)
   _coord_of_net_id[net_id] = coord
   local coord_id = id_of_coord(coord)
@@ -107,11 +107,11 @@ for net_id = 1, 54 do
   _net_id_of_coord_id_and_face_id[coord_id][face_id] = net_id
 end
 
-function coord_of_net_id(net_id)
+local function coord_of_net_id(net_id)
   return _coord_of_net_id[net_id]
 end
 
-function net_id_of_coord_and_face_id(coord, face_id)
+local function net_id_of_coord_and_face_id(coord, face_id)
   return _net_id_of_coord_id_and_face_id[id_of_coord(coord)][face_id]
 end
 
@@ -119,7 +119,7 @@ end
 -- face ID <-> face normal
 --------------------------------------------------------------------------------
 
-function face_normal_of_face_id(face_id)
+local function face_normal_of_face_id(face_id)
   return coord_of_face_id_and_face_local_coord(face_id, 0, 0)
 end
 
@@ -128,7 +128,7 @@ for face_id = 1, 6 do
   _face_id_of_face_normal[id_of_coord(face_normal_of_face_id(face_id))] = face_id
 end
 
-function face_id_of_face_normal(face_normal)
+local function face_id_of_face_normal(face_normal)
   return _face_id_of_face_normal[id_of_coord(face_normal)]
 end
 
@@ -142,11 +142,11 @@ for face_id, face_string in ipairs(_face_string_of_face_id) do
   _face_id_of_face_string[face_string] = face_id
 end
 
-function face_string_of_face_id(face_id)
+local function face_string_of_face_id(face_id)
   return _face_string_of_face_id[face_id]
 end
 
-function face_id_of_face_string(face_string)
+local function face_id_of_face_string(face_string)
   return _face_id_of_face_string[face_string]
 end
 
@@ -154,18 +154,18 @@ end
 -- net rotation
 --------------------------------------------------------------------------------
 
-function rotate_cw(normal, coord)
+local function rotate_cw(normal, coord)
   return {
     coord[3]*normal[2] - coord[2]*normal[3] + coord[1]*math.abs(normal[1]),
     coord[1]*normal[3] - coord[3]*normal[1] + coord[2]*math.abs(normal[2]),
     coord[2]*normal[1] - coord[1]*normal[2] + coord[3]*math.abs(normal[3])}
 end
 
-function dot_product(coord1, coord2)
+local function dot_product(coord1, coord2)
   return (coord1[1] * coord2[1] + coord1[2] * coord2[2] + coord1[3] * coord2[3])
 end
 
-function rotate_net(net_id, move_string)
+local function rotate_net(net_id, move_string)
   -- parse move string
   local move_char = move_string:sub(1,1)
   local move_width = 1
@@ -188,7 +188,7 @@ function rotate_net(net_id, move_string)
   -- apply move
   local rotation_normal = face_normal_of_face_id(move_face_id)
   local coord = coord_of_net_id(net_id)
-  function distance(x, y)
+  local function distance(x, y)
     return math.abs(x - y)
   end
   local distance_from_rotation_face = 1 - dot_product(face_normal_of_face_id(move_face_id), coord)
@@ -247,7 +247,7 @@ local Permutation = {}
 Permutation.__index = Permutation
 
 function Permutation.new(o)
-  o = o or {}
+  local o = o or {}
   setmetatable(o, Permutation)
   for i = 1, 54 do
     o[i] = i
@@ -256,7 +256,7 @@ function Permutation.new(o)
 end
 
 function Permutation:invariant()
-  seen = {}
+  local seen = {}
   for i = 1, 54 do
     assert(1 <= self[i] and self[i] <= 54)
     assert(not seen[self[i]])
@@ -265,7 +265,7 @@ function Permutation:invariant()
 end
 
 function Permutation:clone()
-  o = {}
+  local o = {}
   setmetatable(o, Permutation)
   for i = 1, 54 do
     assert(1 <= self[i] and self[i] <= 54)
@@ -275,7 +275,7 @@ function Permutation:clone()
 end
 
 function Permutation:invert()
-  o = {}
+  local o = {}
   setmetatable(o, Permutation)
   for i = 1, 54 do
     assert(o[self[i]] == nil)
@@ -285,7 +285,7 @@ function Permutation:invert()
 end
 
 function Permutation.__mul(first, second)
-  o = {}
+  local o = {}
   setmetatable(o, Permutation)
   for i = 1, 54 do
     o[i] = second[first[i]]
@@ -302,9 +302,9 @@ end
 
 local _permutation_of_move_string = {}
 for face_id = 1, 6 do
-  face_string = face_string_of_face_id(face_id)
+  local face_string = face_string_of_face_id(face_id)
   for _, d2 in ipairs({"", "'", "2"}) do
-    function f(move_string)
+    local function f(move_string)
       _permutation_of_move_string[move_string] = Permutation.new()
       for i = 1, 54 do
         _permutation_of_move_string[move_string][i] = rotate_net(i, move_string)
@@ -321,7 +321,7 @@ function Permutation.of_move_string(move_string)
 end
 
 for face_id = 1, 6 do
-  face_string = face_string_of_face_id(face_id)
+  local face_string = face_string_of_face_id(face_id)
   assert(Permutation.of_move_string(face_string) * Permutation.of_move_string(face_string .. "'") == Permutation.new())
   assert(Permutation.of_move_string(face_string):invert() == Permutation.of_move_string(face_string .. "'"))
   assert(Permutation.of_move_string(face_string) * Permutation.of_move_string(face_string) == Permutation.of_move_string(face_string .. "2"))
