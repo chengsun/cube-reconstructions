@@ -14,9 +14,7 @@ local state =
     label_filename,
     label_file,
     mode,
-    events_moves, -- { {time=3,moves={"U","D"}}, ...}
-    events_stickers, -- { {time=0, stickers={"WRGBOY?" x 9 for U,"WRGBOY?" x 9 for L, ...FRBD...}} }
-    cached_permutation, -- sticker is events_stickers[time][cached_permutation[time][position]]
+    events, -- { {time=3,moves={"U","D"},permutation={},stickers={}}, ...}. permutation[sticker_id] = net_id where that sticker is right now
   }
 
 function state_reset()
@@ -28,13 +26,10 @@ function state_reset()
   end
   state.label_file = nil
   state.mode = MODE_EDIT_MOVES
-  state.events_moves = {{time = 0, moves = {}}}
-  state.events_stickers = {}
-  state.cached_permutation = {{time = 0, permutation = {}}}
+  state.events = {{time = -1, moves = {}, permutation = cubelib.Permutation.new(), stickers = {}}}
 end
 
 state_reset()
-
 
 function binary_search_last_le(events, time)
   local lo, hi = 0, #events
@@ -73,19 +68,27 @@ function events_moves_append(move)
   if not state.playback_time then
     return nil
   end
-  local idx = binary_search_last_le(state.events_moves, state.playback_time)
-  local was_present = state.events_moves[idx] and state.events_moves[idx].time == state.playback_time
+  local idx = binary_search_last_le(state.events, state.playback_time)
+  local was_present = state.events[idx] and state.events[idx].time == state.playback_time
   if not was_present then
+    table.insert(state.events,
+                 idx + 1,
+                 { time = state.playback_time,
+                   moves = {},
+                   permutation = state.events[idx].permutation,
+                   stickers = state.events[idx].stickers })
     idx = idx + 1
-    table.insert(state.events_moves, idx, {time = state.playback_time, moves = {}})
   end
-  local moves = state.events_moves[idx].moves
+
+  assert(idx >= 2 and idx <= #state.events)
+
+  local moves = state.events[idx].moves
   if move == "BS" then
     if was_present then
       if #moves > 0 then
         table.remove(moves)
       else
-        table.remove(state.events_moves, idx)
+        table.remove(state.events, idx)
       end
     end
   elseif move == "'" or move == "2" then
@@ -100,6 +103,17 @@ function events_moves_append(move)
     end
   else
     table.insert(moves, move)
+  end
+
+  -- update future permutations
+  local i = idx
+  while i <= #state.events do
+    local permutation = state.events[i - 1].permutation
+    for _, move in ipairs(state.events[i].moves) do
+      permutation = permutation * cubelib.Permutation.of_move_string(move)
+    end
+    state.events[i].permutation = permutation
+    i = i + 1
   end
 end
 
@@ -123,22 +137,41 @@ function rerender()
 
   -- debug info
   state.osd.data =
-    "\n{\\pos(320,240)\\fs10\\bord2\\c&HB0B0B0&}mode: " ..
+    "\n{\\pos(0,240)\\fnMonospace\\fs10\\q1\\bord2\\c&HB0B0B0&}mode: " ..
     utils.to_string(state.mode) ..
     "\\Nevents: " ..
-    escape_ass(utils.to_string(state.events_moves))
+    escape_ass(utils.to_string(state.events))
 
-  -- moves
   if state.playback_time then
+    local idx = binary_search_last_le(state.events, state.playback_time)
+
+    assert(idx >= 1 and idx <= #state.events)
+
+    -- moves
     state.osd.data = state.osd.data .. "\n{\\pos(0,0)}"
-    local moves_idx = binary_search_last_le(state.events_moves, state.playback_time)
-    if state.events_moves[moves_idx] then
-      if state.events_moves[moves_idx].time == state.playback_time then
+    if state.events[idx] then
+      if state.events[idx].time == state.playback_time then
         state.osd.data = state.osd.data .. "{\\c&HFFFF00&}"
       else
         state.osd.data = state.osd.data .. "{\\c&HB0B0B0&}"
       end
-      state.osd.data = state.osd.data .. table.concat(state.events_moves[moves_idx].moves, " ") .. " |"
+      state.osd.data = state.osd.data .. table.concat(state.events[idx].moves, " ") .. " |"
+    end
+
+    -- stickers
+    local face_net_position_of_face_id = {{1, 2}, {0, 1}, {1, 1}, {2, 1}, {3, 1}, {1, 0}}
+    for sticker_id = 1, 54 do
+      local net_id = state.events[idx].permutation[sticker_id]
+      local net_face_id = cubelib.face_id_of_net_id(net_id)
+      local net_face_local_id = cubelib.face_local_id_of_net_id(net_id)
+      local net_face_local_x, net_face_local_y = cubelib.face_local_coord_of_face_local_id(net_face_local_id)
+      local net_face_net_position = face_net_position_of_face_id[net_face_id]
+      state.osd.data =
+        state.osd.data ..
+        string.format("\n{\\pos(%d,%d)\\fs10}%d",
+                      640 + 15 * ((net_face_net_position[1] - 4) * 4 + net_face_local_x),
+                      15 * ((2 - net_face_net_position[2]) * 4 + 3 - net_face_local_y),
+                      sticker_id)
     end
   end
 

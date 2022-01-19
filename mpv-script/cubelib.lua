@@ -1,4 +1,4 @@
--- sticker ids:
+-- net ids:
 --
 --             U: 1  2  3
 --                4  5  6
@@ -73,15 +73,15 @@ for local_id = 1, 9 do
 end
 
 --------------------------------------------------------------------------------
--- (global coord, face ID) <-> sticker ID
+-- (global coord, face ID) <-> net ID
 --------------------------------------------------------------------------------
 
-function face_id_of_sticker_id(sticker_id)
-  return math.floor((sticker_id - 1) / 9) + 1
+function face_id_of_net_id(net_id)
+  return math.floor((net_id - 1) / 9) + 1
 end
 
-function face_local_id_of_sticker_id(sticker_id)
-  return ((sticker_id - 1) % 9) + 1
+function face_local_id_of_net_id(net_id)
+  return ((net_id - 1) % 9) + 1
 end
 
 function coord_of_face_id_and_face_local_coord(face_id, face_local_x, face_local_y)
@@ -95,24 +95,24 @@ function coord_of_face_id_and_face_local_coord(face_id, face_local_x, face_local
   end
 end
 
-local _coord_of_sticker_id = {}
-local _sticker_id_of_coord_id_and_face_id = {}
-for sticker_id = 1, 54 do
-  face_id = face_id_of_sticker_id(sticker_id)
-  face_local_x, face_local_y = face_local_coord_of_face_local_id(face_local_id_of_sticker_id(sticker_id))
+local _coord_of_net_id = {}
+local _net_id_of_coord_id_and_face_id = {}
+for net_id = 1, 54 do
+  face_id = face_id_of_net_id(net_id)
+  face_local_x, face_local_y = face_local_coord_of_face_local_id(face_local_id_of_net_id(net_id))
   local coord = coord_of_face_id_and_face_local_coord(face_id, face_local_x, face_local_y)
-  _coord_of_sticker_id[sticker_id] = coord
+  _coord_of_net_id[net_id] = coord
   local coord_id = id_of_coord(coord)
-  _sticker_id_of_coord_id_and_face_id[coord_id] = _sticker_id_of_coord_id_and_face_id[coord_id] or {}
-  _sticker_id_of_coord_id_and_face_id[coord_id][face_id] = sticker_id
+  _net_id_of_coord_id_and_face_id[coord_id] = _net_id_of_coord_id_and_face_id[coord_id] or {}
+  _net_id_of_coord_id_and_face_id[coord_id][face_id] = net_id
 end
 
-function coord_of_sticker_id(sticker_id)
-  return _coord_of_sticker_id[sticker_id]
+function coord_of_net_id(net_id)
+  return _coord_of_net_id[net_id]
 end
 
-function sticker_id_of_coord_and_face_id(coord, face_id)
-  return _sticker_id_of_coord_id_and_face_id[id_of_coord(coord)][face_id]
+function net_id_of_coord_and_face_id(coord, face_id)
+  return _net_id_of_coord_id_and_face_id[id_of_coord(coord)][face_id]
 end
 
 --------------------------------------------------------------------------------
@@ -151,7 +151,7 @@ function face_id_of_face_string(face_string)
 end
 
 --------------------------------------------------------------------------------
--- sticker rotation
+-- net rotation
 --------------------------------------------------------------------------------
 
 function rotate_cw(normal, coord)
@@ -165,7 +165,7 @@ function dot_product(coord1, coord2)
   return (coord1[1] * coord2[1] + coord1[2] * coord2[2] + coord1[3] * coord2[3])
 end
 
-function rotate_sticker(sticker_id, move_string)
+function rotate_net(net_id, move_string)
   -- parse move string
   local move_char = move_string:sub(1,1)
   local move_width = 1
@@ -187,60 +187,60 @@ function rotate_sticker(sticker_id, move_string)
 
   -- apply move
   local rotation_normal = face_normal_of_face_id(move_face_id)
-  local coord = coord_of_sticker_id(sticker_id)
+  local coord = coord_of_net_id(net_id)
   function distance(x, y)
     return math.abs(x - y)
   end
   local distance_from_rotation_face = 1 - dot_product(face_normal_of_face_id(move_face_id), coord)
   if distance_from_rotation_face < move_width
   then
-    local normal = face_normal_of_face_id(face_id_of_sticker_id(sticker_id))
+    local normal = face_normal_of_face_id(face_id_of_net_id(net_id))
     for _ = 1, move_repetitions do
       coord = rotate_cw(rotation_normal, coord)
       normal = rotate_cw(rotation_normal, normal)
     end
-    return sticker_id_of_coord_and_face_id(coord, face_id_of_face_normal(normal))
+    return net_id_of_coord_and_face_id(coord, face_id_of_face_normal(normal))
   else
-    return sticker_id
+    return net_id
   end
 end
 
-assert(rotate_sticker(1, "R") == 1)
-assert(rotate_sticker(2, "R") == 2)
-assert(rotate_sticker(6, "R") == 40)
-assert(rotate_sticker(9, "R") == 37)
-assert(rotate_sticker(9, "R2") == 54)
-assert(rotate_sticker(9, "R'") == 27)
-assert(rotate_sticker(13, "R") == 13)
-assert(rotate_sticker(1, "r") == 1)
-assert(rotate_sticker(2, "r") == 44)
-assert(rotate_sticker(1, "L") == 19)
-assert(rotate_sticker(2, "L") == 2)
-assert(rotate_sticker(1, "l") == 19)
-assert(rotate_sticker(2, "l") == 20)
-assert(rotate_sticker(3, "l") == 3)
-assert(rotate_sticker(28, "l") == 28)
-assert(rotate_sticker(41, "l") == 5)
-assert(rotate_sticker(7, "F") == 28)
-assert(rotate_sticker(7, "F2") == 48)
-assert(rotate_sticker(6, "f2") == 49)
-assert(rotate_sticker(37, "U") == 28)
-assert(rotate_sticker(40, "u2") == 22)
-assert(rotate_sticker(43, "D") == 16)
-assert(rotate_sticker(14, "d") == 23)
-assert(rotate_sticker(40, "B") == 38)
-assert(rotate_sticker(1, "B") == 16)
+assert(rotate_net(1, "R") == 1)
+assert(rotate_net(2, "R") == 2)
+assert(rotate_net(6, "R") == 40)
+assert(rotate_net(9, "R") == 37)
+assert(rotate_net(9, "R2") == 54)
+assert(rotate_net(9, "R'") == 27)
+assert(rotate_net(13, "R") == 13)
+assert(rotate_net(1, "r") == 1)
+assert(rotate_net(2, "r") == 44)
+assert(rotate_net(1, "L") == 19)
+assert(rotate_net(2, "L") == 2)
+assert(rotate_net(1, "l") == 19)
+assert(rotate_net(2, "l") == 20)
+assert(rotate_net(3, "l") == 3)
+assert(rotate_net(28, "l") == 28)
+assert(rotate_net(41, "l") == 5)
+assert(rotate_net(7, "F") == 28)
+assert(rotate_net(7, "F2") == 48)
+assert(rotate_net(6, "f2") == 49)
+assert(rotate_net(37, "U") == 28)
+assert(rotate_net(40, "u2") == 22)
+assert(rotate_net(43, "D") == 16)
+assert(rotate_net(14, "d") == 23)
+assert(rotate_net(40, "B") == 38)
+assert(rotate_net(1, "B") == 16)
 for _, d in ipairs({"U", "L", "F", "R", "B", "D"}) do
   for _, d2 in ipairs({"", "'", "2"}) do
     for i = 1, 54 do
-      assert(rotate_sticker(i, d .. d2) ~= nil)
-      assert(rotate_sticker(i, d:lower() .. d2) ~= nil)
+      assert(rotate_net(i, d .. d2) ~= nil)
+      assert(rotate_net(i, d:lower() .. d2) ~= nil)
     end
   end
 end
 
 --------------------------------------------------------------------------------
--- sticker permutation
+-- net permutation
 --------------------------------------------------------------------------------
 
 local Permutation = {}
@@ -307,7 +307,7 @@ for face_id = 1, 6 do
     function f(move_string)
       _permutation_of_move_string[move_string] = Permutation.new()
       for i = 1, 54 do
-        _permutation_of_move_string[move_string][i] = rotate_sticker(i, move_string)
+        _permutation_of_move_string[move_string][i] = rotate_net(i, move_string)
       end
       _permutation_of_move_string[move_string]:invariant()
     end
@@ -338,11 +338,11 @@ return {
   face_local_coord_of_face_local_id = face_local_coord_of_face_local_id,
   face_local_id_of_face_local_coord = face_local_id_of_face_local_coord,
 
-  face_id_of_sticker_id = face_id_of_sticker_id,
-  face_local_id_of_sticker_id = face_local_id_of_sticker_id,
+  face_id_of_net_id = face_id_of_net_id,
+  face_local_id_of_net_id = face_local_id_of_net_id,
   coord_of_face_id_and_face_local_coord = coord_of_face_id_and_face_local_coord,
-  coord_of_sticker_id = coord_of_sticker_id,
-  sticker_id_of_coord_and_face_id = sticker_id_of_coord_and_face_id,
+  coord_of_net_id = coord_of_net_id,
+  net_id_of_coord_and_face_id = net_id_of_coord_and_face_id,
 
   face_normal_of_face_id = face_normal_of_face_id,
   face_id_of_face_normal = face_id_of_face_normal,
@@ -350,7 +350,7 @@ return {
   face_string_of_face_id = face_string_of_face_id,
   face_id_of_face_string = face_id_of_face_string,
 
-  rotate_sticker = rotate_sticker,
+  rotate_net = rotate_net,
 
   Permutation = Permutation,
 }
