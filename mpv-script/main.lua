@@ -251,10 +251,10 @@ local function rerender()
       local net_face_net_x, net_face_net_y = face_net_position_of_face_id(net_face_id)
       local screen_x = 640 + 15 * ((net_face_net_x - 4) * 4 + net_face_local_x)
       local screen_y = 15 * ((2 - net_face_net_y) * 4 + 3 - net_face_local_y)
-      if net_id == state.net_cursor then
+      if state.mode == MODE_EDIT_STICKERS and net_id == state.net_cursor then
         ass_net_cursor:new_event()
         ass_net_cursor:pos(screen_x, screen_y)
-        ass_net_cursor:append("{\\3c&H00FFFF&\\1a&HFF&\\bord2}")
+        ass_net_cursor:append("{\\3c&HFF00FF&\\1a&HFF&\\bord2}")
         ass_net_cursor:draw_start()
         ass_net_cursor:rect_cw(-7, -7, 7, 7)
         ass_net_cursor:draw_stop()
@@ -280,9 +280,9 @@ local function rerender()
   ass:new_event()
   ass:append(ass_moves.text)
   ass:new_event()
-  ass:append(ass_net_cursor.text)
-  ass:new_event()
   ass:append(ass_stickers.text)
+  ass:new_event()
+  ass:append(ass_net_cursor.text)
 
   state.osd.data = ass.text
   state.osd.z = 500
