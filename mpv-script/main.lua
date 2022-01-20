@@ -6,6 +6,11 @@ local cubelib = require('cubelib')
 local MODE_EDIT_MOVES = "EDIT_MOVES"
 local MODE_EDIT_STICKERS = "EDIT_STICKERS"
 
+local function divmod(n, d)
+  local mod = n % d
+  return math.floor((n - mod) / d), mod
+end
+
 local state =
   {
     osd = mp.create_osd_overlay("ass-events"),
@@ -14,7 +19,7 @@ local state =
     label_filename,
     label_file,
     mode,
-    sticker_cursor,
+    net_cursor,
     events, -- { {time=3,moves={"U","D"},permutation={},stickers={}}, ...}. permutation[sticker_id] = net_id where that sticker is right now
   }
 
@@ -27,7 +32,7 @@ function state_reset()
   end
   state.label_file = nil
   state.mode = MODE_EDIT_MOVES
-  state.sticker_cursor = 23
+  state.net_cursor = 23
   state.events = {{time = -1, moves = {}, permutation = cubelib.Permutation.new(), stickers = {}}}
 end
 
@@ -46,7 +51,7 @@ function binary_search_last_le(events, time)
   return lo
 end
 
-function state_load(media_filename)
+local function state_load(media_filename)
   state_reset()
   if media_filename then
     state.media_filename = media_filename
@@ -55,7 +60,7 @@ function state_load(media_filename)
   end
 end
 
-function process_playback_time(name, val)
+local function process_playback_time(name, val)
   local media_filename = mp.get_property("filename")
   msg.trace("process_playback_time", name, val, media_filename)
   if media_filename ~= state.media_filename then
@@ -66,7 +71,7 @@ function process_playback_time(name, val)
   rerender()
 end
 
-function events_moves_append(move)
+local function events_moves_append(move)
   if not state.playback_time then
     return nil
   end
@@ -121,21 +126,6 @@ function events_moves_append(move)
   end
 end
 
-local keymap = {}
-local function add_keystring(name, str)
-  for i = 1, #str do
-    local c = str:sub(i,i)
-    keymap[c] = keymap[c] or {}
-    table.insert(keymap[c], name)
-    keymap[c][name] = true
-  end
-  msg.info(utils.to_string(keymap))
-end
-
-local function escape_ass(s)
-  return s:gsub("\\n", " "):gsub("\\$", ""):gsub("{","\\{")
-end
-
 local _face_net_position_of_face_id = {{1, 2}, {0, 1}, {1, 1}, {2, 1}, {3, 1}, {1, 0}}
 local _face_id_of_face_net_position = {}
 for face_id, face_net_position in ipairs(_face_net_position_of_face_id) do
@@ -154,6 +144,47 @@ for i = 1, 6 do
   assert(i == face_id_of_face_net_position(x, y))
 end
 
+local net_cursor_move_offsets = {h = {-1, 0}, j = {0, -1}, k = {0, 1}, l = {1, 0}}
+local function net_cursor_move(key)
+  local move_offset = net_cursor_move_offsets[key]
+  assert(move_offset ~= nil)
+  local net_id = state.net_cursor
+  local net_face_id = cubelib.face_id_of_net_id(net_id)
+  local net_face_net_x, net_face_net_y = face_net_position_of_face_id(net_face_id)
+  local net_face_local_id = cubelib.face_local_id_of_net_id(net_id)
+  local net_face_local_x, net_face_local_y = cubelib.face_local_coord_of_face_local_id(net_face_local_id)
+
+  local new_net_face_x = net_face_net_x * 3 + net_face_local_x + 1 + move_offset[1]
+  local new_net_face_y = net_face_net_y * 3 + net_face_local_y + 1 + move_offset[2]
+
+  local new_net_face_net_x, new_net_face_local_x = divmod(new_net_face_x, 3)
+  local new_net_face_net_y, new_net_face_local_y = divmod(new_net_face_x, 3)
+
+  new_net_face_local_x = new_net_face_local_x - 1
+  new_net_face_local_y = new_net_face_local_y - 1
+
+  local new_net_face_id = face_id_of_face_net_position(new_net_face_net_x, new_net_face_net_y)
+  if new_net_face_id == nil then return nil end
+  local new_net_face_local_id = cubelib.face_local_id_of_face_local_coord(new_net_face_local_x, new_net_face_local_y)
+
+  state.net_cursor = cubelib.net_id_of_face_id_and_face_local_id(new_net_face_id, new_net_face_local_id)
+end
+
+local keymap = {}
+local function add_keystring(name, str)
+  for i = 1, #str do
+    local c = str:sub(i,i)
+    keymap[c] = keymap[c] or {}
+    table.insert(keymap[c], name)
+    keymap[c][name] = true
+  end
+  msg.info(utils.to_string(keymap))
+end
+
+local function escape_ass(s)
+  return s:gsub("\\n", " "):gsub("\\$", ""):gsub("{","\\{")
+end
+
 function rerender()
   msg.trace("rerender")
 
@@ -168,7 +199,7 @@ function rerender()
                                  escape_ass(utils.to_string(state.events))))
 
   local ass_moves = assdraw.ass_new()
-  local ass_sticker_cursor = assdraw.ass_new()
+  local ass_net_cursor = assdraw.ass_new()
   local ass_stickers = assdraw.ass_new()
   if state.playback_time then
     local idx = binary_search_last_le(state.events, state.playback_time)
@@ -194,11 +225,11 @@ function rerender()
       local net_face_net_x, net_face_net_y = face_net_position_of_face_id(net_face_id)
       local screen_x = 640 + 15 * ((net_face_net_x - 4) * 4 + net_face_local_x)
       local screen_y = 15 * ((2 - net_face_net_y) * 4 + 3 - net_face_local_y)
-      if net_id == state.sticker_cursor then
-        ass_sticker_cursor:append("{\\c&H00FFFF&\\alpha&H80&\\bord0}")
-        ass_sticker_cursor:draw_start()
-        ass_sticker_cursor:rect_cw(screen_x - 7, screen_y - 7, screen_x + 7, screen_y + 7)
-        ass_sticker_cursor:draw_stop()
+      if net_id == state.net_cursor then
+        ass_net_cursor:append("{\\c&H00FFFF&\\alpha&H80&\\bord0}")
+        ass_net_cursor:draw_start()
+        ass_net_cursor:rect_cw(screen_x - 7, screen_y - 7, screen_x + 7, screen_y + 7)
+        ass_net_cursor:draw_stop()
       end
       ass_stickers:new_event()
       ass_stickers:pos(screen_x, screen_y)
@@ -212,7 +243,7 @@ function rerender()
   ass:new_event()
   ass:append(ass_moves.text)
   ass:new_event()
-  ass:append(ass_sticker_cursor.text)
+  ass:append(ass_net_cursor.text)
   ass:new_event()
   ass:append(ass_stickers.text)
 
@@ -254,6 +285,8 @@ for key, map in pairs(keymap) do
         elseif state.mode == MODE_EDIT_STICKERS then
           if key == "TAB" then
             state.mode = MODE_EDIT_MOVES
+          elseif map["cursor_move"] then
+            net_cursor_move(key)
           end
         end
         rerender()
