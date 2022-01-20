@@ -47,6 +47,28 @@ end
 
 state_reset()
 
+local function serialise_events(events)
+  serialisation = {permutations = {}, colours = {}, events = {}}
+  local n_permutations = 0
+  local n_colours = 0
+  for _, event in ipairs(events) do
+    local permutation_id = serialisation.permutations[event.permutation]
+    if permutation_id == nil then
+      n_permutations = n_permutations + 1
+      serialisation.permutations[event.permutation] = n_permutations
+      permutation_id = n_permutations
+    end
+    local colours_id = serialisation.colours[event.colours]
+    if colours_id == nil then
+      n_colours = n_colours + 1
+      serialisation.colours[event.colours] = n_colours
+      colours_id = n_colours
+    end
+    table.insert(serialisation.events, {time = event.time, moves = event.moves, permutation_id = permutation_id, colours_id = colours_id})
+  end
+  return utils.format_json(serialisation)
+end
+
 local function binary_search_last_le(events, time)
   local lo, hi = 0, #events
   while lo < hi do
@@ -70,9 +92,7 @@ local function state_load(media_filename)
 end
 
 local function events_moves_append(move)
-  if not state.playback_time then
-    return nil
-  end
+  if not state.playback_time then return nil end
   local idx = binary_search_last_le(state.events, state.playback_time)
   local was_present = state.events[idx] and state.events[idx].time == state.playback_time
   if not was_present then
@@ -169,9 +189,7 @@ local function net_cursor_move(key)
 end
 
 local function net_colour(key)
-  if not state.playback_time then
-    return nil
-  end
+  if not state.playback_time then return nil end
   local idx = binary_search_last_le(state.events, state.playback_time)
   local new_colour
   if key == "BS" then
@@ -180,6 +198,22 @@ local function net_colour(key)
     new_colour = key:upper()
   end
   state.events[idx].colours[state.events[idx].permutation[state.net_cursor]] = new_colour
+end
+
+local function handle_seek(key)
+  if not state.playback_time then return nil end
+  local idx = binary_search_last_le(state.events, state.playback_time)
+  if key == "<" then
+    if state.events[idx].time == state.playback_time then
+      idx = idx - 1
+    end
+  elseif key == ">" then
+    idx = idx + 1
+  else assert(false)
+  end
+  if state.events[idx] ~= nil then
+    mp.set_property_number("playback-time", state.events[idx].time)
+  end
 end
 
 local keymap = {}
@@ -296,6 +330,7 @@ add_keystring("slice", "MES")
 add_keystring("rotate", "xyz")
 add_keystring("move_modifier", "'2")
 add_keystring("help", "?")
+add_keystring("seek", "<>")
 keymap["BS"] = {}
 keymap["ESC"] = {}
 keymap["TAB"] = {}
@@ -314,7 +349,9 @@ for key, map in pairs(keymap) do
       end
       function handler (e)
         msg.info("process_key", keystring, utils.to_string(map))
-        if state.mode == MODE_EDIT_MOVES then
+        if map["seek"] then
+          handle_seek(key)
+        elseif state.mode == MODE_EDIT_MOVES then
           if key == "TAB" then
             state.mode = MODE_EDIT_STICKERS
           elseif (map["face"] or map["slice"] or map["rotate"] or map["move_modifier"] or key == "BS") and not ctrl and not alt then
