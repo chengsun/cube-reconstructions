@@ -219,12 +219,7 @@ end
 local function net_colour(key)
   if not state.playback_time then return nil end
   local idx = binary_search_last_le(state.events, state.playback_time)
-  local new_colour
-  if key == "BS" then
-    new_colour = nil
-  else
-    new_colour = key:upper()
-  end
+  local new_colour = key:upper()
   state.events[idx].colours[state.events[idx].permutation[state.net_cursor]] = new_colour
 end
 
@@ -322,7 +317,7 @@ local function rerender()
         ass_net_cursor:draw_stop()
       end
       local colour = state.events[idx].colours[sticker_id]
-      if colour ~= nil then
+      if colour ~= "" then
         ass_stickers:new_event()
         ass_stickers:pos(screen_x, screen_y)
         ass_stickers:append(string.format("{\\1c&H%s&\\1a&H40&\\bord0}", ass_of_colour[colour]))
@@ -390,8 +385,10 @@ for key, map in pairs(keymap) do
             state.mode = MODE_EDIT_MOVES
           elseif map["cursor_move"] then
             net_cursor_move(key)
-          elseif map["colour"] or key == "BS" then
+          elseif map["colour"] then
             net_colour(key)
+          elseif key == "BS" or key == "x" then
+            net_colour("")
           end
         end
         rerender()
@@ -430,7 +427,3 @@ end
 mp.add_forced_key_binding("mbtn_left", nil, process_mbtn_left, {complex = true})
 mp.add_forced_key_binding("mouse_move", nil, process_mouse_move)
 mp.observe_property("playback-time", "number", process_playback_time)
-
-local f = io.open("foo", "r")
-msg.info(f:read())
-f:close()
