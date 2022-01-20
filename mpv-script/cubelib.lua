@@ -359,13 +359,16 @@ function Permutation.__eq(first, second)
 end
 
 local _permutation_of_move_string = {}
+local _permutation_of_move_string_invert = {}
 if true then
   local function f(move_string)
-    _permutation_of_move_string[move_string] = Permutation.new()
+    local p = Permutation.new()
+    _permutation_of_move_string[move_string] = p
     for i = 1, 54 do
-      _permutation_of_move_string[move_string][i] = rotate_net(i, move_string)
+      p[i] = rotate_net(i, move_string)
     end
-    _permutation_of_move_string[move_string]:invariant()
+    p:invariant()
+    _permutation_of_move_string_invert[move_string] = p:invert()
   end
   for _, d2 in ipairs({"", "'", "2"}) do
     for face_id = 1, 6 do
@@ -383,6 +386,10 @@ function Permutation.of_move_string(move_string)
   return _permutation_of_move_string[move_string]
 end
 
+function Permutation.of_move_string_invert(move_string)
+  return _permutation_of_move_string_invert[move_string]
+end
+
 for face_id = 1, 6 do
   local face_string = face_string_of_face_id(face_id)
   assert(Permutation.of_move_string(face_string) * Permutation.of_move_string(face_string .. "'") == Permutation.new())
@@ -393,6 +400,21 @@ assert(Permutation.of_move_string("M") ==
        Permutation.of_move_string("L'") *
        Permutation.of_move_string("R") *
        Permutation.of_move_string("x'"))
+if true then
+  local function test(move)
+    assert(Permutation.of_move_string_invert(move) == Permutation.of_move_string(move .. "'"))
+    assert(Permutation.of_move_string_invert(move .. "'") == Permutation.of_move_string(move))
+    assert(Permutation.of_move_string_invert(move .. "2") == Permutation.of_move_string(move .. "2"))
+  end
+  for face_id = 1, 6 do
+    local d = face_string_of_face_id(face_id)
+    test(d)
+    test(d:lower())
+  end
+  for _, d in ipairs({"M", "E", "S", "x", "y", "z"}) do
+    test(d)
+  end
+end
 
 --------------------------------------------------------------------------------
 -- public interface
