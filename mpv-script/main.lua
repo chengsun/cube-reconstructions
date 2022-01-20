@@ -20,7 +20,7 @@ local state =
     label_file,
     mode,
     net_cursor,
-    events, -- { {time=3,moves={"U","D"},permutation={},stickers={}}, ...}. permutation[sticker_id] = net_id where that sticker is right now
+    events, -- { {time=3,moves={"U","D"},permutation={},colours={}}, ...}. permutation[net_id] = sticker_id at that net position right now
   }
 
 function state_reset()
@@ -33,7 +33,7 @@ function state_reset()
   state.label_file = nil
   state.mode = MODE_EDIT_MOVES
   state.net_cursor = 23
-  state.events = {{time = -1, moves = {}, permutation = cubelib.Permutation.new(), stickers = {}}}
+  state.events = {{time = -1, moves = {}, permutation = cubelib.Permutation.new(), colours = {}}}
 end
 
 state_reset()
@@ -83,7 +83,7 @@ local function events_moves_append(move)
                  { time = state.playback_time,
                    moves = {},
                    permutation = state.events[idx].permutation,
-                   stickers = state.events[idx].stickers })
+                   colours = state.events[idx].colours })
     idx = idx + 1
   end
 
@@ -117,9 +117,9 @@ local function events_moves_append(move)
   while i <= #state.events do
     local permutation = state.events[i - 1].permutation
     for _, move in ipairs(state.events[i].moves) do
-      local p2 = cubelib.Permutation.of_move_string(move)
+      local p2 = cubelib.Permutation.of_move_string_invert(move)
       assert(p2 ~= nil)
-      permutation = permutation * p2
+      permutation = p2 * permutation
     end
     state.events[i].permutation = permutation
     i = i + 1
@@ -154,11 +154,11 @@ local function net_cursor_move(key)
   local net_face_local_id = cubelib.face_local_id_of_net_id(net_id)
   local net_face_local_x, net_face_local_y = cubelib.face_local_coord_of_face_local_id(net_face_local_id)
 
-  local new_net_face_x = net_face_net_x * 3 + net_face_local_x + 1 + move_offset[1]
-  local new_net_face_y = net_face_net_y * 3 + net_face_local_y + 1 + move_offset[2]
+  local new_net_x = net_face_net_x * 3 + net_face_local_x + 1 + move_offset[1]
+  local new_net_y = net_face_net_y * 3 + net_face_local_y + 1 + move_offset[2]
 
-  local new_net_face_net_x, new_net_face_local_x = divmod(new_net_face_x, 3)
-  local new_net_face_net_y, new_net_face_local_y = divmod(new_net_face_x, 3)
+  local new_net_face_net_x, new_net_face_local_x = divmod(new_net_x, 3)
+  local new_net_face_net_y, new_net_face_local_y = divmod(new_net_y, 3)
 
   new_net_face_local_x = new_net_face_local_x - 1
   new_net_face_local_y = new_net_face_local_y - 1
@@ -168,6 +168,20 @@ local function net_cursor_move(key)
   local new_net_face_local_id = cubelib.face_local_id_of_face_local_coord(new_net_face_local_x, new_net_face_local_y)
 
   state.net_cursor = cubelib.net_id_of_face_id_and_face_local_id(new_net_face_id, new_net_face_local_id)
+end
+
+local function net_colour(key)
+  if not state.playback_time then
+    return nil
+  end
+  local idx = binary_search_last_le(state.events, state.playback_time)
+  local new_colour
+  if key == "BS" then
+    new_colour = nil
+  else
+    new_colour = key:upper()
+  end
+  state.events[idx].colours[state.events[idx].permutation[state.net_cursor]] = new_colour
 end
 
 local keymap = {}
@@ -184,6 +198,8 @@ end
 local function escape_ass(s)
   return s:gsub("\\n", " "):gsub("\\$", ""):gsub("{","\\{")
 end
+
+local ass_of_colour = { W = "FFFFFF", R = "0000FF", G = "00FF00", B = "FF0000", O = "0080FF", Y = "00FFFF" }
 
 function rerender()
   msg.trace("rerender")
@@ -217,8 +233,8 @@ function rerender()
     ass_moves:append(" |")
 
     -- stickers
-    for sticker_id = 1, 54 do
-      local net_id = state.events[idx].permutation[sticker_id]
+    for net_id = 1, 54 do
+      local sticker_id = state.events[idx].permutation[net_id]
       local net_face_id = cubelib.face_id_of_net_id(net_id)
       local net_face_local_id = cubelib.face_local_id_of_net_id(net_id)
       local net_face_local_x, net_face_local_y = cubelib.face_local_coord_of_face_local_id(net_face_local_id)
@@ -226,10 +242,18 @@ function rerender()
       local screen_x = 640 + 15 * ((net_face_net_x - 4) * 4 + net_face_local_x)
       local screen_y = 15 * ((2 - net_face_net_y) * 4 + 3 - net_face_local_y)
       if net_id == state.net_cursor then
-        ass_net_cursor:append("{\\c&H00FFFF&\\alpha&H80&\\bord0}")
+        ass_net_cursor:append("{\\3c&H00FFFF&\\1a&HFF&\\bord2}")
         ass_net_cursor:draw_start()
         ass_net_cursor:rect_cw(screen_x - 7, screen_y - 7, screen_x + 7, screen_y + 7)
         ass_net_cursor:draw_stop()
+      end
+      local colour = state.events[idx].colours[sticker_id]
+      if colour ~= nil then
+        ass_stickers:new_event()
+        ass_stickers:append(string.format("{\\1c&H%s&\\1a&H40&\\bord0}", ass_of_colour[colour]))
+        ass_stickers:draw_start()
+        ass_stickers:rect_cw(screen_x - 7, screen_y - 7, screen_x + 7, screen_y + 7)
+        ass_stickers:draw_stop()
       end
       ass_stickers:new_event()
       ass_stickers:pos(screen_x, screen_y)
@@ -287,6 +311,8 @@ for key, map in pairs(keymap) do
             state.mode = MODE_EDIT_MOVES
           elseif map["cursor_move"] then
             net_cursor_move(key)
+          elseif map["colour"] or key == "BS" then
+            net_colour(key)
           end
         end
         rerender()
