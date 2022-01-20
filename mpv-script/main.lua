@@ -48,25 +48,62 @@ end
 state_reset()
 
 local function serialise_events(events)
-  serialisation = {permutations = {}, colours = {}, events = {}}
-  local n_permutations = 0
-  local n_colours = 0
+  local permutation_id_of_permutation = {}
+  local colours_id_of_colours = {}
+  local serialisation = {permutations = {}, colours = {}, events = {}}
   for _, event in ipairs(events) do
-    local permutation_id = serialisation.permutations[event.permutation]
+    local permutation_id = permutation_id_of_permutation[event.permutation]
     if permutation_id == nil then
-      n_permutations = n_permutations + 1
-      serialisation.permutations[event.permutation] = n_permutations
-      permutation_id = n_permutations
+      table.insert(serialisation.permutations, event.permutation)
+      permutation_id_of_permutation[event.permutation] = #serialisation.permutations
+      permutation_id = #serialisation.permutations
     end
-    local colours_id = serialisation.colours[event.colours]
+    local colours_id = colours_id_of_colours[event.colours]
     if colours_id == nil then
-      n_colours = n_colours + 1
-      serialisation.colours[event.colours] = n_colours
-      colours_id = n_colours
+      table.insert(serialisation.colours, event.colours)
+      colours_id_of_colours[event.colours] = #serialisation.colours
+      colours_id = #serialisation.colours
     end
     table.insert(serialisation.events, {time = event.time, moves = event.moves, permutation_id = permutation_id, colours_id = colours_id})
   end
   return utils.format_json(serialisation)
+end
+
+local function deserialise_events(serial_string)
+  local serialisation = utils.parse_json(serial_string)
+  if serialisation == nil then return nil end
+  local events = {}
+  for _, sevent in ipairs(serialisation.events) do
+    table.insert(events,
+                  { time = sevent.time,
+                    moves = sevent.moves,
+                    permutation = serialisation.permutations[sevent.permutation_id],
+                    colours = serialisation.colours[sevent.colours_id] })
+  end
+  return events
+end
+
+local function handle_load()
+  if state.label_filename then
+    local file = io.open(state.label_filename, "r")
+    if file ~= nil then
+      local serial_string = file:read("*all")
+      file:close()
+      local events = deserialise_events(serial_string)
+      if events ~= nil then
+        state.events = events
+      end
+    end
+  end
+end
+
+local function handle_save()
+  if state.label_filename then
+    local serial_string = serialise_events(state.events)
+    local file = io.open(state.label_filename, "w")
+    file:write(serial_string)
+    file:close()
+  end
 end
 
 local function binary_search_last_le(events, time)
@@ -80,15 +117,6 @@ local function binary_search_last_le(events, time)
     end
   end
   return lo
-end
-
-local function state_load(media_filename)
-  state_reset()
-  if media_filename then
-    state.media_filename = media_filename
-    state.label_filename = media_filename .. ".cube-labels.json"
-    -- TODO: load json
-  end
 end
 
 local function events_moves_append(move)
@@ -373,6 +401,8 @@ for key, map in pairs(keymap) do
   end
 end
 
+mp.add_forced_key_binding("Ctrl+s", nil, handle_save)
+
 local function process_mbtn_left(e)
   --msg.info("process_mbtn_left")
 end
@@ -386,7 +416,12 @@ local function process_playback_time(name, val)
   msg.trace("process_playback_time", name, val, media_filename)
   if media_filename ~= state.media_filename then
     msg.info("reset state: change of filename")
-    state_load(media_filename)
+    state_reset()
+    if media_filename then
+      state.media_filename = media_filename
+      state.label_filename = media_filename .. ".cube-labels.json"
+      handle_load()
+    end
   end
   state.playback_time = val
   rerender()
