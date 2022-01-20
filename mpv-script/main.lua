@@ -23,7 +23,7 @@ local state =
     events, -- { {time=3,moves={"U","D"},permutation={},colours={}}, ...}. permutation[net_id] = sticker_id at that net position right now
   }
 
-function state_reset()
+local function state_reset()
   state.media_filename = nil
   state.playback_time = nil
   state.label_filename = nil
@@ -47,7 +47,7 @@ end
 
 state_reset()
 
-function binary_search_last_le(events, time)
+local function binary_search_last_le(events, time)
   local lo, hi = 0, #events
   while lo < hi do
     local mid = hi - math.floor((hi - lo) / 2)
@@ -67,17 +67,6 @@ local function state_load(media_filename)
     state.label_filename = media_filename .. ".cube-labels.json"
     -- TODO: load json
   end
-end
-
-local function process_playback_time(name, val)
-  local media_filename = mp.get_property("filename")
-  msg.trace("process_playback_time", name, val, media_filename)
-  if media_filename ~= state.media_filename then
-    msg.info("reset state: change of filename")
-    state_load(media_filename)
-  end
-  state.playback_time = val
-  rerender()
 end
 
 local function events_moves_append(move)
@@ -210,7 +199,7 @@ end
 
 local ass_of_colour = { W = "FFFFFF", R = "0000FF", G = "00FF00", B = "FF0000", O = "0080FF", Y = "00FFFF" }
 
-function rerender()
+local function rerender()
   msg.trace("rerender")
 
   -- debug info
@@ -232,14 +221,26 @@ function rerender()
     assert(idx >= 1 and idx <= #state.events)
 
     -- moves
+    if state.mode == MODE_EDIT_MOVES then
+      ass_moves:new_event()
+      ass_moves:pos(0, 0)
+      ass_moves:append("{\\fs16\\an7\\bord2}")
+      ass_moves:append("{\\alpha&HFF&}")
+      ass_moves:append(table.concat(state.events[idx].moves, " "))
+      ass_moves:append("{\\1c&HFF00FF&\\1a&H80&\\bord0}")
+      ass_moves:draw_start()
+      ass_moves:rect_cw(-10000, 2, 5, 16)
+      ass_moves:draw_stop()
+    end
+    ass_moves:new_event()
     ass_moves:pos(0, 0)
+    ass_moves:append("{\\fs16\\an7\\bord2}")
     if state.events[idx].time == state.playback_time then
-      ass_moves:append("{\\c&HFFFF00&}")
+      ass_moves:append("{\\1c&HFFFF00&}")
     else
-      ass_moves:append("{\\c&HB0B0B0&}")
+      ass_moves:append("{\\1c&HB0B0B0&}")
     end
     ass_moves:append(table.concat(state.events[idx].moves, " "))
-    ass_moves:append(" |")
 
     -- stickers
     for net_id = 1, 54 do
@@ -335,12 +336,23 @@ for key, map in pairs(keymap) do
   end
 end
 
-function process_mbtn_left(e)
+local function process_mbtn_left(e)
   --msg.info("process_mbtn_left")
 end
 
-function process_mouse_move(e)
+local function process_mouse_move(e)
   --msg.info("process_mouse_move")
+end
+
+local function process_playback_time(name, val)
+  local media_filename = mp.get_property("filename")
+  msg.trace("process_playback_time", name, val, media_filename)
+  if media_filename ~= state.media_filename then
+    msg.info("reset state: change of filename")
+    state_load(media_filename)
+  end
+  state.playback_time = val
+  rerender()
 end
 
 mp.add_forced_key_binding("mbtn_left", nil, process_mbtn_left, {complex = true})
