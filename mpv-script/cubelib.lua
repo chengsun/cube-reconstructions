@@ -73,7 +73,7 @@ for local_id = 1, 9 do
 end
 
 --------------------------------------------------------------------------------
--- (global coord, face ID) <-> net ID
+-- (face ID, face local ID) <-> net ID
 --------------------------------------------------------------------------------
 
 local function face_id_of_net_id(net_id)
@@ -83,6 +83,20 @@ end
 local function face_local_id_of_net_id(net_id)
   return ((net_id - 1) % 9) + 1
 end
+
+local function net_id_of_face_id_and_face_local_id(face_id, face_local_id)
+  return (face_id - 1) * 9 + face_local_id
+end
+
+for net_id = 1, 54 do
+  local face_id = face_id_of_net_id(net_id)
+  local face_local_id = face_local_id_of_net_id(net_id)
+  assert(net_id_of_face_id_and_face_local_id(face_id, face_local_id) == net_id)
+end
+
+--------------------------------------------------------------------------------
+-- (global coord, face ID) <-> net ID
+--------------------------------------------------------------------------------
 
 local function coord_of_face_id_and_face_local_coord(face_id, face_local_x, face_local_y)
   if face_id == 1 then return { face_local_x, 1, face_local_y } -- U
@@ -393,6 +407,8 @@ return {
 
   face_id_of_net_id = face_id_of_net_id,
   face_local_id_of_net_id = face_local_id_of_net_id,
+  net_id_of_face_id_and_face_local_id = net_id_of_face_id_and_face_local_id,
+
   coord_of_face_id_and_face_local_coord = coord_of_face_id_and_face_local_coord,
   coord_of_net_id = coord_of_net_id,
   net_id_of_coord_and_face_id = net_id_of_coord_and_face_id,
