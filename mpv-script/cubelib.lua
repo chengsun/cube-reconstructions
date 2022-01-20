@@ -161,20 +161,17 @@ local function rotate_cw(normal, coord)
     coord[2]*normal[1] - coord[1]*normal[2] + coord[3]*math.abs(normal[3])}
 end
 
-local function dot_product(coord1, coord2)
+local function vec3_dot(coord1, coord2)
   return (coord1[1] * coord2[1] + coord1[2] * coord2[2] + coord1[3] * coord2[3])
+end
+
+local function vec3_sub(coord1, coord2)
+  return {coord1[1] - coord2[1], coord1[2] - coord2[2], coord1[3] - coord2[3]}
 end
 
 local function rotate_net(net_id, move_string)
   -- parse move string
   local move_char = move_string:sub(1,1)
-  local move_width = 1
-  if move_char == move_char:lower() then
-    move_width = 2
-    move_char = move_char:upper()
-  end
-  local move_face_id
-  move_face_id = face_id_of_face_string(move_char)
   local move_repetitions = 1
   if #move_string > 1 then
     if move_string:sub(2,2) == "2" then
@@ -185,13 +182,41 @@ local function rotate_net(net_id, move_string)
     end
   end
 
+  local rotation_normal
+  local face_offset = {0, 0, 0}
+  local move_width = 1
+  if true then
+    local move_face_id = face_id_of_face_string(move_char:upper())
+    if move_face_id ~= nil then
+      if move_char == move_char:lower() then
+        move_width = 2
+      end
+      rotation_normal = face_normal_of_face_id(move_face_id)
+      face_offset = rotation_normal
+    elseif move_char == "M" then
+      rotation_normal = face_normal_of_face_id(face_id_of_face_string("L"))
+    elseif move_char == "E" then
+      rotation_normal = face_normal_of_face_id(face_id_of_face_string("D"))
+    elseif move_char == "S" then
+      rotation_normal = face_normal_of_face_id(face_id_of_face_string("F"))
+    elseif move_char == "x" then
+      rotation_normal = face_normal_of_face_id(face_id_of_face_string("R"))
+      move_width = 3
+    elseif move_char == "y" then
+      rotation_normal = face_normal_of_face_id(face_id_of_face_string("U"))
+      move_width = 3
+    elseif move_char == "z" then
+      rotation_normal = face_normal_of_face_id(face_id_of_face_string("F"))
+      move_width = 3
+    end
+  end
+
   -- apply move
-  local rotation_normal = face_normal_of_face_id(move_face_id)
   local coord = coord_of_net_id(net_id)
   local function distance(x, y)
     return math.abs(x - y)
   end
-  local distance_from_rotation_face = 1 - dot_product(face_normal_of_face_id(move_face_id), coord)
+  local distance_from_rotation_face = math.abs(vec3_dot(rotation_normal, vec3_sub(coord, face_offset)))
   if distance_from_rotation_face < move_width
   then
     local normal = face_normal_of_face_id(face_id_of_net_id(net_id))
@@ -230,11 +255,30 @@ assert(rotate_net(43, "D") == 16)
 assert(rotate_net(14, "d") == 23)
 assert(rotate_net(40, "B") == 38)
 assert(rotate_net(1, "B") == 16)
-for _, d in ipairs({"U", "L", "F", "R", "B", "D"}) do
+assert(rotate_net(4, "M") == 4)
+assert(rotate_net(5, "M") == 23)
+assert(rotate_net(11, "E") == 11)
+assert(rotate_net(14, "E") == 23)
+assert(rotate_net(2, "S") == 2)
+assert(rotate_net(5, "S") == 32)
+assert(rotate_net(1, "x") == 45)
+assert(rotate_net(9, "x") == 37)
+assert(rotate_net(1, "y") == 3)
+assert(rotate_net(9, "y") == 7)
+assert(rotate_net(1, "z") == 30)
+assert(rotate_net(9, "z") == 34)
+for i = 1, 54 do
   for _, d2 in ipairs({"", "'", "2"}) do
-    for i = 1, 54 do
+    for face_id = 1, 6 do
+      local d = face_string_of_face_id(face_id)
       assert(rotate_net(i, d .. d2) ~= nil)
       assert(rotate_net(i, d:lower() .. d2) ~= nil)
+    end
+    for _, d in ipairs({"M", "E", "S"}) do
+      assert(rotate_net(i, d .. d2) ~= nil)
+    end
+    for _, d in ipairs({"x", "y", "z"}) do
+      assert(rotate_net(i, d .. d2) ~= nil)
     end
   end
 end
@@ -301,18 +345,23 @@ function Permutation.__eq(first, second)
 end
 
 local _permutation_of_move_string = {}
-for face_id = 1, 6 do
-  local face_string = face_string_of_face_id(face_id)
-  for _, d2 in ipairs({"", "'", "2"}) do
-    local function f(move_string)
-      _permutation_of_move_string[move_string] = Permutation.new()
-      for i = 1, 54 do
-        _permutation_of_move_string[move_string][i] = rotate_net(i, move_string)
-      end
-      _permutation_of_move_string[move_string]:invariant()
+if true then
+  local function f(move_string)
+    _permutation_of_move_string[move_string] = Permutation.new()
+    for i = 1, 54 do
+      _permutation_of_move_string[move_string][i] = rotate_net(i, move_string)
     end
-    f(face_string .. d2)
-    f(face_string:lower() .. d2)
+    _permutation_of_move_string[move_string]:invariant()
+  end
+  for _, d2 in ipairs({"", "'", "2"}) do
+    for face_id = 1, 6 do
+      local face_string = face_string_of_face_id(face_id)
+      f(face_string .. d2)
+      f(face_string:lower() .. d2)
+    end
+    for _, d in ipairs({"M", "E", "S", "x", "y", "z"}) do
+      f(d .. d2)
+    end
   end
 end
 
@@ -326,6 +375,10 @@ for face_id = 1, 6 do
   assert(Permutation.of_move_string(face_string):invert() == Permutation.of_move_string(face_string .. "'"))
   assert(Permutation.of_move_string(face_string) * Permutation.of_move_string(face_string) == Permutation.of_move_string(face_string .. "2"))
 end
+assert(Permutation.of_move_string("M") ==
+       Permutation.of_move_string("L'") *
+       Permutation.of_move_string("R") *
+       Permutation.of_move_string("x'"))
 
 --------------------------------------------------------------------------------
 -- public interface
