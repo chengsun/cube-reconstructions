@@ -33,7 +33,16 @@ function state_reset()
   state.label_file = nil
   state.mode = MODE_EDIT_MOVES
   state.net_cursor = 23
-  state.events = {{time = -1, moves = {}, permutation = cubelib.Permutation.new(), colours = {}}}
+  local colours = {}
+  local colour_of_face_id = {"W", "O", "G", "R", "B", "Y"}
+  for net_id = 1, 54 do
+    colours[net_id] = colour_of_face_id[cubelib.face_id_of_net_id(net_id)]
+  end
+  state.events = {
+    { time = -1,
+      moves = {},
+      permutation = cubelib.Permutation.new(),
+      colours = colours }}
 end
 
 state_reset()
@@ -242,22 +251,25 @@ function rerender()
       local screen_x = 640 + 15 * ((net_face_net_x - 4) * 4 + net_face_local_x)
       local screen_y = 15 * ((2 - net_face_net_y) * 4 + 3 - net_face_local_y)
       if net_id == state.net_cursor then
+        ass_net_cursor:new_event()
+        ass_net_cursor:pos(screen_x, screen_y)
         ass_net_cursor:append("{\\3c&H00FFFF&\\1a&HFF&\\bord2}")
         ass_net_cursor:draw_start()
-        ass_net_cursor:rect_cw(screen_x - 7, screen_y - 7, screen_x + 7, screen_y + 7)
+        ass_net_cursor:rect_cw(-7, -7, 7, 7)
         ass_net_cursor:draw_stop()
       end
       local colour = state.events[idx].colours[sticker_id]
       if colour ~= nil then
         ass_stickers:new_event()
+        ass_stickers:pos(screen_x, screen_y)
         ass_stickers:append(string.format("{\\1c&H%s&\\1a&H40&\\bord0}", ass_of_colour[colour]))
         ass_stickers:draw_start()
-        ass_stickers:rect_cw(screen_x - 7, screen_y - 7, screen_x + 7, screen_y + 7)
+        ass_stickers:rect_cw(-7, -7, 7, 7)
         ass_stickers:draw_stop()
       end
       ass_stickers:new_event()
       ass_stickers:pos(screen_x, screen_y)
-      ass_stickers:append("{\\fs10\\an5}")
+      ass_stickers:append("{\\fs10\\an5\\1c&H808080\\bord0}")
       ass_stickers:append(string.format("%d", sticker_id))
     end
   end
@@ -279,7 +291,8 @@ end
 add_keystring("colour", "wrgboyWRGBOY")
 add_keystring("cursor_move", "hjkl")
 add_keystring("face", "furbldFURBLD")
-add_keystring("slice", "mesMES")
+add_keystring("slice", "MES")
+add_keystring("rotate", "xyz")
 add_keystring("move_modifier", "'2")
 add_keystring("help", "?")
 keymap["BS"] = {}
@@ -303,7 +316,7 @@ for key, map in pairs(keymap) do
         if state.mode == MODE_EDIT_MOVES then
           if key == "TAB" then
             state.mode = MODE_EDIT_STICKERS
-          elseif (map["face"] or map["slice"] or map["move_modifier"] or key == "BS") and not ctrl and not alt then
+          elseif (map["face"] or map["slice"] or map["rotate"] or map["move_modifier"] or key == "BS") and not ctrl and not alt then
             events_moves_append(key)
           end
         elseif state.mode == MODE_EDIT_STICKERS then
