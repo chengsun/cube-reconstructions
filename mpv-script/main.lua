@@ -34,11 +34,12 @@ local function state_reset()
   end
   state.label_file = nil
   state.mode = MODE_EDIT_MOVES
-  state.net_cursor = 23
+  state.net_cursor = 1
   local colours = {}
   local colour_of_face_id = {"W", "O", "G", "R", "B", "Y"}
   for net_id = 1, 54 do
-    colours[net_id] = colour_of_face_id[cubelib.face_id_of_net_id(net_id)]
+    --colours[net_id] = colour_of_face_id[cubelib.face_id_of_net_id(net_id)]
+    colours[net_id] = ""
   end
   state.events = {
     { time = -1,
@@ -221,8 +222,17 @@ end
 local function net_colour(key)
   if not state.playback_time then return nil end
   local idx = binary_search_last_le(state.events, state.playback_time)
+  local event = state.events[idx]
   local new_colour = key:upper()
-  state.events[idx].colours[state.events[idx].permutation[state.net_cursor]] = new_colour
+  event.colours[event.permutation[state.net_cursor]] = new_colour
+  local new_net_cursor = state.net_cursor + 1
+  while new_net_cursor <= 54 do
+    if event.colours[event.permutation[new_net_cursor]] == "" then break end
+    new_net_cursor = new_net_cursor + 1
+  end
+  if new_net_cursor <= 54 then
+    state.net_cursor = new_net_cursor
+  end
 end
 
 local function handle_seek(key)
