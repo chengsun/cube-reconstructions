@@ -335,7 +335,7 @@ local function tick()
   end
 
   local ass = assdraw.ass_new()
-  ass:append(ass_debug.text)
+  --ass:append(ass_debug.text)
   ass:new_event()
   ass:append(ass_moves.text)
   ass:new_event()
