@@ -14,6 +14,8 @@ end
 local state =
   {
     osd = mp.create_osd_overlay("ass-events"),
+    tick_timer = nil,
+    tick_last_time = 0,                     -- when the last tick() was run
     media_filename,
     playback_time,
     label_filename,
@@ -256,8 +258,8 @@ end
 
 local ass_of_colour = { W = "FFFFFF", R = "0000FF", G = "00FF00", B = "FF0000", O = "0080FF", Y = "00FFFF" }
 
-local function rerender()
-  msg.trace("rerender")
+local function tick()
+  msg.trace("tick")
 
   -- debug info
   local ass_debug = assdraw.ass_new()
@@ -344,6 +346,29 @@ local function rerender()
   state.osd.data = ass.text
   state.osd.z = 500
   state.osd:update()
+
+  state.tick_last_time = mp.get_time()
+end
+
+local tick_delay = 0.03
+
+-- Request that tick() is called (which typically re-renders the OSC).
+-- The tick is then either executed immediately, or rate-limited if it was
+-- called a small time ago.
+function request_tick()
+  if state.tick_timer == nil then
+    state.tick_timer = mp.add_timeout(0, tick)
+  end
+
+  if not state.tick_timer:is_enabled() then
+    local now = mp.get_time()
+    local timeout = tick_delay - (now - state.tick_last_time)
+    if timeout < 0 then
+      timeout = 0
+    end
+    state.tick_timer.timeout = timeout
+    state.tick_timer:resume()
+  end
 end
 
 add_keystring("colour", "wrgboyWRGBOY")
@@ -391,7 +416,7 @@ for key, map in pairs(keymap) do
             net_colour("")
           end
         end
-        rerender()
+        request_tick()
       end
       mp.add_forced_key_binding(keystring, nil, handler)
     end
@@ -421,7 +446,7 @@ local function process_playback_time(name, val)
     end
   end
   state.playback_time = val
-  rerender()
+  request_tick()
 end
 
 mp.add_forced_key_binding("mbtn_left", nil, process_mbtn_left, {complex = true})
