@@ -6,6 +6,8 @@ local cubelib = require('cubelib')
 local MODE_EDIT_MOVES = "EDIT_MOVES"
 local MODE_EDIT_STICKERS = "EDIT_STICKERS"
 
+local MOVE_RESET = "*"
+
 local function divmod(n, d)
   local mod = n % d
   return math.floor((n - mod) / d), mod
@@ -25,6 +27,16 @@ local state =
     events, -- { {time=3,moves={"U","D"},permutation={},colours={}}, ...}. permutation[net_id] = sticker_id at that net position right now
   }
 
+local function colours_new()
+  local colours = {}
+  local colour_of_face_id = {"W", "O", "G", "R", "B", "Y"}
+  for net_id = 1, 54 do
+    --colours[net_id] = colour_of_face_id[cubelib.face_id_of_net_id(net_id)]
+    colours[net_id] = ""
+  end
+  return colours
+end
+
 local function state_reset()
   state.media_filename = nil
   state.playback_time = nil
@@ -35,17 +47,11 @@ local function state_reset()
   state.label_file = nil
   state.mode = MODE_EDIT_MOVES
   state.net_cursor = 1
-  local colours = {}
-  local colour_of_face_id = {"W", "O", "G", "R", "B", "Y"}
-  for net_id = 1, 54 do
-    --colours[net_id] = colour_of_face_id[cubelib.face_id_of_net_id(net_id)]
-    colours[net_id] = ""
-  end
   state.events = {
     { time = -1,
       moves = {},
       permutation = cubelib.Permutation.new(),
-      colours = colours }}
+      colours = colours_new() }}
 end
 
 state_reset()
@@ -104,8 +110,11 @@ local function handle_save()
   if state.label_filename then
     local serial_string = serialise_events(state.events)
     local file = io.open(state.label_filename, "w")
-    file:write(serial_string)
-    file:close()
+    if file ~= nil then
+      mp.osd_message("Saved", 1.0)
+      file:write(serial_string)
+      file:close()
+    end
   end
 end
 
@@ -148,7 +157,7 @@ local function events_moves_append(move)
       end
     end
   elseif move == "'" or move == "2" then
-    if was_present then
+    if was_present and moves[#moves] ~= MOVE_RESET then
       if #moves > 0 then
         if moves[#moves]:sub(2,2) == move then
           moves[#moves] = moves[#moves]:sub(1,1)
@@ -162,17 +171,28 @@ local function events_moves_append(move)
   end
 
   -- update future permutations
-  local i = idx
-  while i <= #state.events do
-    local permutation = state.events[i - 1].permutation
-    for _, move in ipairs(state.events[i].moves) do
-      local p2 = cubelib.Permutation.of_move_string_invert(move)
-      assert(p2 ~= nil)
-      permutation = p2 * permutation
+  local function update_future_permutations()
+    local i = idx
+    while i <= #state.events do
+      local colours = state.events[i - 1].colours
+      local permutation = state.events[i - 1].permutation
+      for _, move in ipairs(state.events[i].moves) do
+        if move == MOVE_RESET then
+          if i > idx then return end
+          colours = colours_new()
+          permutation = cubelib.Permutation.new()
+        else
+          local p2 = cubelib.Permutation.of_move_string_invert(move)
+          assert(p2 ~= nil)
+          permutation = p2 * permutation
+        end
+      end
+      state.events[i].permutation = permutation
+      state.events[i].colours = colours
+      i = i + 1
     end
-    state.events[i].permutation = permutation
-    i = i + 1
   end
+  update_future_permutations()
 end
 
 local _face_net_position_of_face_id = {{1, 2}, {0, 1}, {1, 1}, {2, 1}, {3, 1}, {1, 0}}
@@ -386,6 +406,7 @@ add_keystring("cursor_move", "hjkl")
 add_keystring("face", "furbldFURBLD")
 add_keystring("slice", "MES")
 add_keystring("rotate", "xyz")
+add_keystring("move_reset", MOVE_RESET)
 add_keystring("move_modifier", "'2")
 add_keystring("help", "?")
 add_keystring("seek", "<>")
@@ -412,7 +433,12 @@ for key, map in pairs(keymap) do
         elseif state.mode == MODE_EDIT_MOVES then
           if key == "TAB" then
             state.mode = MODE_EDIT_STICKERS
-          elseif (map["face"] or map["slice"] or map["rotate"] or map["move_modifier"] or key == "BS") and not ctrl and not alt then
+          elseif (map["face"] or
+                  map["slice"] or
+                  map["rotate"] or
+                  map["move_modifier"] or
+                  map["move_reset"] or
+                  key == "BS") and not ctrl and not alt then
             events_moves_append(key)
           end
         elseif state.mode == MODE_EDIT_STICKERS then
