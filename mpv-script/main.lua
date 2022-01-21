@@ -13,18 +13,28 @@ local function divmod(n, d)
   return math.floor((n - mod) / d), mod
 end
 
+local function time_ms_of_time_float(float)
+  if float == nil then return nil end
+  return math.floor(float * 1000 + 0.5)
+end
+
+local function time_float_of_time_ms(ms)
+  if ms == nil then return nil end
+  return ms / 1000
+end
+
 local state =
   {
     osd = mp.create_osd_overlay("ass-events"),
     tick_timer = nil,
     tick_last_time = 0,                     -- when the last tick() was run
     media_filename,
-    playback_time,
+    playback_time_ms,
     label_filename,
     label_file,
     mode,
     net_cursor,
-    events, -- { {time=3,moves={"U","D"},permutation={},colours={}}, ...}. permutation[net_id] = sticker_id at that net position right now
+    events, -- { {time_ms=3,moves={"U","D"},permutation={},colours={}}, ...}. permutation[net_id] = sticker_id at that net position right now
   }
 
 local function colours_new()
@@ -39,7 +49,7 @@ end
 
 local function state_reset()
   state.media_filename = nil
-  state.playback_time = nil
+  state.playback_time_ms = nil
   state.label_filename = nil
   if state.label_file then
     state.label_file:close()
@@ -48,7 +58,7 @@ local function state_reset()
   state.mode = MODE_EDIT_MOVES
   state.net_cursor = 1
   state.events = {
-    { time = -1,
+    { time_ms = -1,
       moves = {},
       permutation = cubelib.Permutation.new(),
       colours = colours_new() }}
@@ -73,7 +83,11 @@ local function serialise_events(events)
       colours_id_of_colours[event.colours] = #serialisation.colours
       colours_id = #serialisation.colours
     end
-    table.insert(serialisation.events, {time = event.time, moves = event.moves, permutation_id = permutation_id, colours_id = colours_id})
+    table.insert(serialisation.events,
+                 { time = time_float_of_time_ms(event.time_ms),
+                   moves = event.moves,
+                   permutation_id = permutation_id,
+                   colours_id = colours_id })
   end
   return utils.format_json(serialisation)
 end
@@ -84,11 +98,15 @@ local function deserialise_events(serial_string)
   local events = {}
   for _, sevent in ipairs(serialisation.events) do
     table.insert(events,
-                  { time = sevent.time,
-                    moves = sevent.moves,
-                    permutation = serialisation.permutations[sevent.permutation_id],
-                    colours = serialisation.colours[sevent.colours_id] })
+                 { time_ms = time_ms_of_time_float(sevent.time),
+                   moves = sevent.moves,
+                   permutation = serialisation.permutations[sevent.permutation_id],
+                   colours = serialisation.colours[sevent.colours_id] })
   end
+  local function event_time_ms_lt(e1, e2)
+    return e1.time_ms < e2.time_ms
+  end
+  table.sort(events, event_time_ms_lt)
   return events
 end
 
@@ -118,11 +136,11 @@ local function handle_save()
   end
 end
 
-local function binary_search_last_le(events, time)
+local function binary_search_last_le(events, time_ms)
   local lo, hi = 0, #events
   while lo < hi do
     local mid = hi - math.floor((hi - lo) / 2)
-    if mid == 0 or events[mid].time <= time then
+    if mid == 0 or events[mid].time_ms <= time_ms then
       lo = mid
     else
       hi = mid - 1
@@ -132,13 +150,13 @@ local function binary_search_last_le(events, time)
 end
 
 local function events_moves_append(move)
-  if not state.playback_time then return nil end
-  local idx = binary_search_last_le(state.events, state.playback_time)
-  local was_present = state.events[idx] and state.events[idx].time == state.playback_time
+  if not state.playback_time_ms then return nil end
+  local idx = binary_search_last_le(state.events, state.playback_time_ms)
+  local was_present = state.events[idx] and state.events[idx].time_ms == state.playback_time_ms
   if not was_present then
     table.insert(state.events,
                  idx + 1,
-                 { time = state.playback_time,
+                 { time_ms = state.playback_time_ms,
                    moves = {},
                    permutation = state.events[idx].permutation,
                    colours = state.events[idx].colours })
@@ -240,8 +258,8 @@ local function net_cursor_move(key)
 end
 
 local function net_colour(key)
-  if not state.playback_time then return nil end
-  local idx = binary_search_last_le(state.events, state.playback_time)
+  if not state.playback_time_ms then return nil end
+  local idx = binary_search_last_le(state.events, state.playback_time_ms)
   local event = state.events[idx]
   local new_colour = key:upper()
   event.colours[event.permutation[state.net_cursor]] = new_colour
@@ -256,10 +274,10 @@ local function net_colour(key)
 end
 
 local function handle_seek(key)
-  if not state.playback_time then return nil end
-  local idx = binary_search_last_le(state.events, state.playback_time)
+  if not state.playback_time_ms then return nil end
+  local idx = binary_search_last_le(state.events, state.playback_time_ms)
   if key == "<" then
-    if state.events[idx].time == state.playback_time then
+    if state.events[idx].time_ms == state.playback_time_ms then
       idx = idx - 1
     end
   elseif key == ">" then
@@ -267,7 +285,7 @@ local function handle_seek(key)
   else assert(false)
   end
   if state.events[idx] ~= nil then
-    mp.set_property_number("playback-time", state.events[idx].time)
+    mp.set_property_number("playback-time", time_float_of_time_ms(state.events[idx].time_ms))
   end
 end
 
@@ -297,17 +315,19 @@ local function tick()
   ass_debug:append(
     "{\\fnMonospace\\fs10\\q1\\bord2\\c&HB0B0B0&}"
   )
-  ass_debug:append(string.format("mode: %s\\Nevents: %s",
-                                 utils.to_string(state.mode),
-                                 escape_ass(utils.to_string(state.events))))
+  ass_debug:append(string.format("mode: %s", utils.to_string(state.mode)))
 
   local ass_moves = assdraw.ass_new()
   local ass_net_cursor = assdraw.ass_new()
   local ass_stickers = assdraw.ass_new()
-  if state.playback_time then
-    local idx = binary_search_last_le(state.events, state.playback_time)
+  if state.playback_time_ms then
+    local idx = binary_search_last_le(state.events, state.playback_time_ms)
 
     assert(idx >= 1 and idx <= #state.events)
+
+    ass_debug:append(string.format("\\Ncur time = %d ms, evt time = %d ms",
+                                   state.playback_time_ms,
+                                   state.events[idx].time_ms))
 
     -- moves
     if state.mode == MODE_EDIT_MOVES then
@@ -316,7 +336,12 @@ local function tick()
       ass_moves:append("{\\fs16\\an7\\bord2}")
       ass_moves:append("{\\alpha&HFF&}")
       ass_moves:append(table.concat(state.events[idx].moves, " "))
-      ass_moves:append("{\\1c&HFF00FF&\\1a&H80&\\bord0}")
+      if state.events[idx].time_ms == state.playback_time_ms then
+        ass_moves:append("{\\1c&HFFFF00&}")
+      else
+        ass_moves:append("{\\1c&HFF00FF&}")
+      end
+      ass_moves:append("{\\1a&H80&\\bord0}")
       ass_moves:draw_start()
       ass_moves:rect_cw(-10000, 2, 5, 16)
       ass_moves:draw_stop()
@@ -324,7 +349,7 @@ local function tick()
     ass_moves:new_event()
     ass_moves:pos(0, 0)
     ass_moves:append("{\\fs16\\an7\\bord2}")
-    if state.events[idx].time == state.playback_time then
+    if state.events[idx].time_ms == state.playback_time_ms then
       ass_moves:append("{\\1c&HFFFF00&}")
     else
       ass_moves:append("{\\1c&HB0B0B0&}")
@@ -365,7 +390,7 @@ local function tick()
   end
 
   local ass = assdraw.ass_new()
-  --ass:append(ass_debug.text)
+  ass:append(ass_debug.text)
   ass:new_event()
   ass:append(ass_moves.text)
   ass:new_event()
@@ -481,7 +506,7 @@ local function process_playback_time(name, val)
       handle_load()
     end
   end
-  state.playback_time = val
+  state.playback_time_ms = time_ms_of_time_float(val)
   request_tick()
 end
 
