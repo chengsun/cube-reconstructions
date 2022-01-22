@@ -5,8 +5,13 @@ local cubelib = require('cubelib')
 
 local MODE_EDIT_MOVES = "EDIT_MOVES"
 local MODE_EDIT_STICKERS = "EDIT_STICKERS"
+local MODE_EDIT_BOUNDING_BOX = "EDIT_BOUNDING_BOX"
 
 local MOVE_RESET = "*"
+
+local MOUSE_STATE_NONE = ""
+local MOUSE_STATE_DRAGGING_CENTRE = "DRAGGING_CENTRE"
+local MOUSE_STATE_DRAGGING_CORNER = "DRAGGING_CORNER"
 
 local SCALE = 30
 
@@ -31,12 +36,17 @@ local state =
     tick_timer = nil,
     tick_last_time = 0,                     -- when the last tick() was run
     media_filename,
+    video_width,
+    video_height,
     playback_time_ms,
-    label_filename,
-    label_file,
+    playback_paused,
     mode,
     net_cursor,
     events, -- { {time_ms=3,moves={"U","D"},permutation={},colours={}}, ...}. permutation[net_id] = sticker_id at that net position right now
+    bounding_box_events, -- { {time_ms=3,bounding_box={x,y,w,h,enabled}}}
+
+    mouse_state,
+    mouse_drag_start, -- {x,y}
   }
 
 local function colours_new()
@@ -51,19 +61,22 @@ end
 
 local function state_reset()
   state.media_filename = nil
+  state.video_width = nil
+  state.video_height = nil
   state.playback_time_ms = nil
-  state.label_filename = nil
-  if state.label_file then
-    state.label_file:close()
-  end
-  state.label_file = nil
+  state.playback_paused = mp.get_property("paused")
   state.mode = MODE_EDIT_MOVES
   state.net_cursor = 1
   state.events = {
     { time_ms = -1,
       moves = {},
       permutation = cubelib.Permutation.new(),
-      colours = colours_new() }}
+      colours = colours_new(), }}
+  state.bounding_box_events = {
+    { time_ms = -1,
+      bounding_box = {x=0,y=0,w=0,h=0,enabled=false}, }}
+  state.mouse_state = MOUSE_STATE_NONE
+  state.mouse_drag_start = nil
 end
 
 state_reset()
@@ -91,7 +104,13 @@ local function serialise_events(events)
                    permutation_id = permutation_id,
                    colours_id = colours_id })
   end
-  return utils.format_json(serialisation)
+  local json = utils.format_json(serialisation)
+  assert(json)
+  return json
+end
+
+local function event_time_ms_lt(e1, e2)
+  return e1.time_ms < e2.time_ms
 end
 
 local function deserialise_events(serial_string)
@@ -105,40 +124,72 @@ local function deserialise_events(serial_string)
                    permutation = serialisation.permutations[sevent.permutation_id],
                    colours = serialisation.colours[sevent.colours_id] })
   end
-  local function event_time_ms_lt(e1, e2)
-    return e1.time_ms < e2.time_ms
-  end
   table.sort(events, event_time_ms_lt)
   return events
 end
 
+local function serialise_bounding_box_events(bounding_box_events)
+  assert(bounding_box_events)
+  local json = utils.format_json(bounding_box_events)
+  assert(json)
+  return json
+end
+
+local function deserialise_bounding_box_events(serial_string)
+  local bounding_box_events = utils.parse_json(serial_string)
+  if bounding_box_events == nil then return nil end
+  table.sort(bounding_box_events, event_time_ms_lt)
+  return bounding_box_events
+end
+
+local function events_filename()
+  return state.media_filename and (state.media_filename .. ".cube-labels.json")
+end
+
+local function bounding_box_filename()
+  return state.media_filename and (state.media_filename .. ".bounding-box.json")
+end
+
 local function handle_load()
-  if state.label_filename then
-    local file = io.open(state.label_filename, "r")
-    if file ~= nil then
-      local serial_string = file:read("*all")
-      file:close()
-      local events = deserialise_events(serial_string)
-      if events ~= nil then
-        state.events = events
-      end
+  if state.media_filename == nil then return nil end
+
+  local file = io.open(events_filename(), "r")
+  if file ~= nil then
+    local serial_string = file:read("*all")
+    file:close()
+    local events = deserialise_events(serial_string)
+    if events ~= nil then
+      state.events = events
+    end
+  end
+
+  local file = io.open(bounding_box_filename(), "r")
+  if file ~= nil then
+    local serial_string = file:read("*all")
+    file:close()
+    local bounding_box_events = deserialise_bounding_box_events(serial_string)
+    if events ~= nil then
+      state.bounding_box_events = bounding_box_events
     end
   end
 end
 
 local function handle_save()
-  if state.label_filename then
-    local serial_string = serialise_events(state.events)
-    local file = io.open(state.label_filename, "w")
-    if file ~= nil then
-      mp.osd_message("Saved", 1.0)
-      file:write(serial_string)
-      file:close()
-    end
+  if state.media_filename == nil then return nil end
+
+  local events_file = io.open(events_filename(), "w")
+  local bounding_box_file = io.open(bounding_box_filename(), "w")
+  if events_file ~= nil and bounding_box_file ~= nil then
+    events_file:write(serialise_events(state.events))
+    bounding_box_file:write(serialise_bounding_box_events(state.bounding_box_events))
+    mp.osd_message("Saved", 1.0)
   end
+  if events_file ~= nil then events_file:close() end
+  if bounding_box_file ~= nil then bounding_box_file:close() end
 end
 
 local function binary_search_last_le(events, time_ms)
+  assert(time_ms ~= nil)
   local lo, hi = 0, #events
   while lo < hi do
     local mid = hi - math.floor((hi - lo) / 2)
@@ -213,6 +264,53 @@ local function events_moves_append(move)
     end
   end
   update_future_permutations()
+end
+
+-- returns bounding_box, idx_le
+local function bounding_box_get_lerp(time_ms)
+  local idx_le = binary_search_last_le(state.bounding_box_events, time_ms)
+  local event_le = state.bounding_box_events[idx_le]
+  local time_ms_le = event_le.time_ms
+  local bounding_box
+  if time_ms == time_ms_le or idx_le == #state.bounding_box_events then
+    return event_le.bounding_box, idx_le
+  else
+    local event_ge = state.bounding_box_events[idx_le + 1]
+    local time_ms_ge = event_ge.time_ms
+    local numerator = time_ms - time_ms_le
+    local denominator = time_ms_ge - time_ms_le
+    assert(denominator > 0)
+    local lerp_factor = numerator / denominator
+    assert(lerp_factor > 0 and lerp_factor < 1)
+    function lerp(value_le, value_ge)
+      return value_le + (value_ge - value_le) * lerp_factor
+    end
+    bounding_box = {
+      x = lerp(event_le.x, event_ge.x),
+      y = lerp(event_le.y, event_ge.y),
+      w = lerp(event_le.w, event_ge.w),
+      h = lerp(event_le.h, event_ge.h),
+      enabled = event_le.enabled }
+  end
+  return bounding_box, idx_le
+end
+
+local function events_bounding_box_set(bounding_box)
+  if state.playback_time_ms == nil then
+    return nil
+  end
+  local bounding_box, idx = bounding_box_get_lerp(state.playback_time_ms)
+  local was_present = state.bounding_box_events[idx_le].time_ms == state.playback_time_ms
+  if not was_present then
+    table.insert(state.bounding_box_events,
+                 idx + 1,
+                 { time_ms = state.playback_time_ms,
+                   bounding_box = bounding_box,
+                   permutation = state.events[idx].permutation,
+                   colours = state.events[idx].colours })
+    idx = idx + 1
+  end
+
 end
 
 local _face_net_position_of_face_id = {{1, 2}, {0, 1}, {1, 1}, {2, 1}, {3, 1}, {1, 0}}
@@ -312,6 +410,21 @@ local function tick()
   msg.trace("tick")
 
   local screen_width, screen_height, aspect = mp.get_osd_size()
+  state.video_width = mp.get_property("width") or state.video_width or screen_width
+  state.video_height = mp.get_property("height") or state.video_height or screen_height
+
+  function screen_x_of_video_x(video_x)
+    return video_x / state.video_width * screen_width
+  end
+  function screen_y_of_video_y(video_y)
+    return video_y / state.video_height * screen_height
+  end
+  function video_x_of_screen_x(screen_x)
+    return screen_x / screen_width * state.video_width
+  end
+  function video_y_of_screen_y(screen_y)
+    return screen_y / screen_height * state.video_height
+  end
 
   -- debug info
   local ass_debug = assdraw.ass_new()
@@ -322,6 +435,7 @@ local function tick()
   local ass_moves = assdraw.ass_new()
   local ass_net_cursor = assdraw.ass_new()
   local ass_stickers = assdraw.ass_new()
+  local ass_bounding_box = assdraw.ass_new()
   if state.playback_time_ms then
     local idx = binary_search_last_le(state.events, state.playback_time_ms)
 
@@ -365,12 +479,12 @@ local function tick()
       local net_face_local_id = cubelib.face_local_id_of_net_id(net_id)
       local net_face_local_x, net_face_local_y = cubelib.face_local_coord_of_face_local_id(net_face_local_id)
       local net_face_net_x, net_face_net_y = face_net_position_of_face_id(net_face_id)
-      local screen_x = screen_width + 1.5 * SCALE * ((net_face_net_x - 4) * 4 + net_face_local_x)
-      local screen_y = 1.5 * SCALE * ((2 - net_face_net_y) * 4 + 3 - net_face_local_y)
+      local screen_x = screen_width + 1.5 * SCALE * ((net_face_net_x - 4) * 3.3 + net_face_local_x)
+      local screen_y = 1.5 * SCALE * ((2 - net_face_net_y) * 3.3 + 3 - net_face_local_y)
       if state.mode == MODE_EDIT_STICKERS and net_id == state.net_cursor then
         ass_net_cursor:new_event()
         ass_net_cursor:pos(screen_x, screen_y)
-        ass_net_cursor:append("{\\3c&HFF00FF&\\1a&HFF&\\bord2}")
+        ass_net_cursor:append(string.format("{\\3c&HFF00FF&\\1a&HFF&\\bord%.1f}", 0.2 * SCALE))
         ass_net_cursor:draw_start()
         ass_net_cursor:rect_cw(-0.7 * SCALE, -0.7 * SCALE, 0.7 * SCALE, 0.7 * SCALE)
         ass_net_cursor:draw_stop()
@@ -389,6 +503,29 @@ local function tick()
       ass_stickers:append(string.format("{\\fs%d\\an5\\1c&H808080\\bord0}", math.floor(SCALE)))
       ass_stickers:append(string.format("%d", sticker_id))
     end
+
+    -- bounding box
+    local bounding_box, idx = bounding_box_get_lerp(state.playback_time_ms)
+    ass_bounding_box:new_event()
+    ass_bounding_box:pos(screen_x_of_video_x(bounding_box.x), screen_y_of_video_y(bounding_box.y))
+    ass_bounding_box:draw_start()
+    if state.mode == MODE_EDIT_BOUNDING_BOX then
+      ass_bounding_box:append("{\\1c&HFFFF00&\\3c&HFFFF00&}")
+    else
+      ass_bounding_box:append("{\\1c&H808080&\\3c&H808080&}")
+    end
+    ass_bounding_box:append(string.format("\\1a&HFF&\\3a&H80&\\bord%.1f}", 0.2 * SCALE))
+    ass_bounding_box:rect_cw(
+      -screen_x_of_video_x(bounding_box.w) / 2,
+      -screen_y_of_video_y(bounding_box.h) / 2,
+      screen_x_of_video_x(bounding_box.w) / 2,
+      screen_y_of_video_y(bounding_box.h) / 2)
+    if state.mode == MODE_EDIT_BOUNDING_BOX then
+      local centre_size = 0.2 * SCALE
+      ass_bounding_box:append("\\1a&H80&\\3a&HFF&\\bord0}")
+      ass_bounding_box:rect_cw(-centre_size, -centre_size, centre_size, centre_size)
+    end
+    ass_bounding_box:draw_stop()
   end
 
   local ass = assdraw.ass_new()
@@ -399,6 +536,8 @@ local function tick()
   ass:append(ass_stickers.text)
   ass:new_event()
   ass:append(ass_net_cursor.text)
+  ass:new_event()
+  ass:append(ass_bounding_box.text)
 
   state.osd.res_x = screen_width
   state.osd.res_y = screen_height
@@ -472,13 +611,19 @@ for key, map in pairs(keymap) do
           end
         elseif state.mode == MODE_EDIT_STICKERS then
           if key == "TAB" then
-            state.mode = MODE_EDIT_MOVES
+            state.mode = MODE_EDIT_BOUNDING_BOX
+            mp.enable_key_bindings("bounding-box")
           elseif map["cursor_move"] then
             net_cursor_move(key)
           elseif map["colour"] then
             net_colour(key)
           elseif key == "BS" or key == "x" then
             net_colour("")
+          end
+        elseif state.mode == MODE_EDIT_BOUNDING_BOX then
+          if key == "TAB" then
+            state.mode = MODE_EDIT_MOVES
+            mp.disable_key_bindings("bounding-box")
           end
         end
         request_tick()
@@ -490,12 +635,8 @@ end
 
 mp.add_forced_key_binding("Ctrl+s", nil, handle_save)
 
-local function process_mbtn_left(e)
-  --msg.info("process_mbtn_left")
-end
-
-local function process_mouse_move(e)
-  --msg.info("process_mouse_move")
+local function process_mouse_event(source, action)
+  msg.info("process_mouse_event", source, action)
 end
 
 local function process_playback_time(name, val)
@@ -506,7 +647,6 @@ local function process_playback_time(name, val)
     state_reset()
     if media_filename then
       state.media_filename = media_filename
-      state.label_filename = media_filename .. ".cube-labels.json"
       handle_load()
     end
   end
@@ -514,9 +654,37 @@ local function process_playback_time(name, val)
   request_tick()
 end
 
-mp.add_forced_key_binding("mbtn_left", nil, process_mbtn_left, {complex = true})
-mp.add_forced_key_binding("mouse_move", nil, process_mouse_move)
+mp.set_key_bindings({
+    {"mbtn_left",           function(e) process_mouse_event("mbtn_left", "up") end,
+                            function(e) process_mouse_event("mbtn_left", "down")  end},
+    {"shift+mbtn_left",     function(e) process_mouse_event("shift+mbtn_left", "up") end,
+                            function(e) process_mouse_event("shift+mbtn_left", "down")  end},
+    {"mbtn_right",          function(e) process_mouse_event("mbtn_right", "up") end,
+                            function(e) process_mouse_event("mbtn_right", "down")  end},
+    -- alias to shift_mbtn_left for single-handed mouse use
+    {"mbtn_mid",            function(e) process_mouse_event("shift+mbtn_left", "up") end,
+                            function(e) process_mouse_event("shift+mbtn_left", "down")  end},
+    {"wheel_up",            function(e) process_mouse_event("wheel_up", "press") end},
+    {"wheel_down",          function(e) process_mouse_event("wheel_down", "press") end},
+    {"mouse_move",          function(e) process_mouse_event("mouse_move", nil) end},
+    {"mbtn_left_dbl",       "ignore"},
+    {"shift+mbtn_left_dbl", "ignore"},
+    {"mbtn_right_dbl",      "ignore"},
+}, "bounding-box", "force")
+mp.disable_key_bindings("bounding-box")
+
 mp.observe_property("playback-time", "number", process_playback_time)
 
-mp.observe_property("osd-dimensions", "native",
-                    function(name, val) request_tick() end)
+local function process_osd_dimensions(name, val)
+  local screen_width, screen_height = mp.get_osd_size()
+  mp.set_mouse_area(0, 0, screen_width, screen_height, "bounding-box")
+  request_tick()
+end
+
+process_osd_dimensions()
+
+mp.observe_property("osd-dimensions", "native", process_osd_dimensions)
+
+mp.observe_property("pause", "bool", function (name, paused)
+                      state.playback_paused = paused
+                      end)
