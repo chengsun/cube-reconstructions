@@ -8,6 +8,8 @@ local MODE_EDIT_STICKERS = "EDIT_STICKERS"
 
 local MOVE_RESET = "*"
 
+local SCALE = 30
+
 local function divmod(n, d)
   local mod = n % d
   return math.floor((n - mod) / d), mod
@@ -309,12 +311,12 @@ local ass_of_colour = { W = "FFFFFF", R = "0000FF", G = "00FF00", B = "FF0000", 
 local function tick()
   msg.trace("tick")
 
+  local screen_width, screen_height, aspect = mp.get_osd_size()
+
   -- debug info
   local ass_debug = assdraw.ass_new()
   ass_debug:pos(0, 240)
-  ass_debug:append(
-    "{\\fnMonospace\\fs10\\q1\\bord2\\c&HB0B0B0&}"
-  )
+  ass_debug:append(string.format("{\\fnMonospace\\fs%d\\q1\\bord2\\c&HB0B0B0&}", math.floor(SCALE)))
   ass_debug:append(string.format("mode: %s", utils.to_string(state.mode)))
 
   local ass_moves = assdraw.ass_new()
@@ -333,7 +335,7 @@ local function tick()
     if state.mode == MODE_EDIT_MOVES then
       ass_moves:new_event()
       ass_moves:pos(0, 0)
-      ass_moves:append("{\\fs16\\an7\\bord2}")
+      ass_moves:append(string.format("{\\fs%d\\an7\\bord2}", math.floor(1.6 * SCALE)))
       ass_moves:append("{\\alpha&HFF&}")
       ass_moves:append(table.concat(state.events[idx].moves, " "))
       if state.events[idx].time_ms == state.playback_time_ms then
@@ -343,12 +345,12 @@ local function tick()
       end
       ass_moves:append("{\\1a&H80&\\bord0}")
       ass_moves:draw_start()
-      ass_moves:rect_cw(-10000, 2, 5, 16)
+      ass_moves:rect_cw(-10000, 0, 0.5 * SCALE, 1.6 * SCALE)
       ass_moves:draw_stop()
     end
     ass_moves:new_event()
     ass_moves:pos(0, 0)
-    ass_moves:append("{\\fs16\\an7\\bord2}")
+    ass_moves:append(string.format("{\\fs%d\\an7\\bord2}", math.floor(1.6 * SCALE)))
     if state.events[idx].time_ms == state.playback_time_ms then
       ass_moves:append("{\\1c&HFFFF00&}")
     else
@@ -363,14 +365,14 @@ local function tick()
       local net_face_local_id = cubelib.face_local_id_of_net_id(net_id)
       local net_face_local_x, net_face_local_y = cubelib.face_local_coord_of_face_local_id(net_face_local_id)
       local net_face_net_x, net_face_net_y = face_net_position_of_face_id(net_face_id)
-      local screen_x = 640 + 15 * ((net_face_net_x - 4) * 4 + net_face_local_x)
-      local screen_y = 15 * ((2 - net_face_net_y) * 4 + 3 - net_face_local_y)
+      local screen_x = screen_width + 1.5 * SCALE * ((net_face_net_x - 4) * 4 + net_face_local_x)
+      local screen_y = 1.5 * SCALE * ((2 - net_face_net_y) * 4 + 3 - net_face_local_y)
       if state.mode == MODE_EDIT_STICKERS and net_id == state.net_cursor then
         ass_net_cursor:new_event()
         ass_net_cursor:pos(screen_x, screen_y)
         ass_net_cursor:append("{\\3c&HFF00FF&\\1a&HFF&\\bord2}")
         ass_net_cursor:draw_start()
-        ass_net_cursor:rect_cw(-7, -7, 7, 7)
+        ass_net_cursor:rect_cw(-0.7 * SCALE, -0.7 * SCALE, 0.7 * SCALE, 0.7 * SCALE)
         ass_net_cursor:draw_stop()
       end
       local colour = state.events[idx].colours[sticker_id]
@@ -379,12 +381,12 @@ local function tick()
         ass_stickers:pos(screen_x, screen_y)
         ass_stickers:append(string.format("{\\1c&H%s&\\1a&H40&\\bord0}", ass_of_colour[colour]))
         ass_stickers:draw_start()
-        ass_stickers:rect_cw(-7, -7, 7, 7)
+        ass_stickers:rect_cw(-0.7 * SCALE, -0.7 * SCALE, 0.7 * SCALE, 0.7 * SCALE)
         ass_stickers:draw_stop()
       end
       ass_stickers:new_event()
       ass_stickers:pos(screen_x, screen_y)
-      ass_stickers:append("{\\fs10\\an5\\1c&H808080\\bord0}")
+      ass_stickers:append(string.format("{\\fs%d\\an5\\1c&H808080\\bord0}", math.floor(SCALE)))
       ass_stickers:append(string.format("%d", sticker_id))
     end
   end
@@ -398,6 +400,8 @@ local function tick()
   ass:new_event()
   ass:append(ass_net_cursor.text)
 
+  state.osd.res_x = screen_width
+  state.osd.res_y = screen_height
   state.osd.data = ass.text
   state.osd.z = 500
   state.osd:update()
@@ -513,3 +517,6 @@ end
 mp.add_forced_key_binding("mbtn_left", nil, process_mbtn_left, {complex = true})
 mp.add_forced_key_binding("mouse_move", nil, process_mouse_move)
 mp.observe_property("playback-time", "number", process_playback_time)
+
+mp.observe_property("osd-dimensions", "native",
+                    function(name, val) request_tick() end)
