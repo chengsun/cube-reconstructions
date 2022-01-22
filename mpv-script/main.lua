@@ -499,7 +499,7 @@ local function process_mouse_move(e)
 end
 
 local function process_playback_time(name, val)
-  local media_filename = mp.get_property("filename")
+  local media_filename = mp.get_property("path")
   msg.trace("process_playback_time", name, val, media_filename)
   if media_filename ~= state.media_filename then
     msg.info("reset state: change of filename")
