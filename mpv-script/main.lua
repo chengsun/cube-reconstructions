@@ -86,16 +86,18 @@ local function serialise_events(events)
   local colours_id_of_colours = {}
   local serialisation = {permutations = {}, colours = {}, events = {}}
   for _, event in ipairs(events) do
-    local permutation_id = permutation_id_of_permutation[event.permutation]
+    local permutation_string = utils.format_json(event.permutation)
+    local permutation_id = permutation_id_of_permutation[permutation_string]
     if permutation_id == nil then
       table.insert(serialisation.permutations, event.permutation)
-      permutation_id_of_permutation[event.permutation] = #serialisation.permutations
+      permutation_id_of_permutation[permutation_string] = #serialisation.permutations
       permutation_id = #serialisation.permutations
     end
-    local colours_id = colours_id_of_colours[event.colours]
+    local colours_string = utils.format_json(event.colours)
+    local colours_id = colours_id_of_colours[colours_string]
     if colours_id == nil then
       table.insert(serialisation.colours, event.colours)
-      colours_id_of_colours[event.colours] = #serialisation.colours
+      colours_id_of_colours[colours_string] = #serialisation.colours
       colours_id = #serialisation.colours
     end
     table.insert(serialisation.events,
