@@ -13,7 +13,7 @@ local MOUSE_STATE_NONE = ""
 local MOUSE_STATE_DRAGGING_CENTRE = "DRAGGING_CENTRE"
 local MOUSE_STATE_DRAGGING_CORNER = "DRAGGING_CORNER"
 
-local SCALE = 30
+local SCALE = 20
 
 local function divmod(n, d)
   local mod = n % d
@@ -491,8 +491,11 @@ local function tick()
       local net_face_local_id = cubelib.face_local_id_of_net_id(net_id)
       local net_face_local_x, net_face_local_y = cubelib.face_local_coord_of_face_local_id(net_face_local_id)
       local net_face_net_x, net_face_net_y = face_net_position_of_face_id(net_face_id)
-      local screen_x = screen_width + 1.5 * SCALE * ((net_face_net_x - 4) * 3.3 + net_face_local_x)
-      local screen_y = 1.5 * SCALE * ((2 - net_face_net_y) * 3.3 + 3 - net_face_local_y)
+      local gap = 0.3
+      --local offset_x = screen_width - 1.5 * SCALE * (4 * (3 + gap) - gap)
+      local offset_x = 0
+      local screen_x = offset_x + 1.5 * SCALE * (net_face_net_x * (3 + gap) + 1.5 + net_face_local_x)
+      local screen_y = 1.5 * SCALE * ((2 - net_face_net_y) * (3 + gap) + 1.5 - net_face_local_y)
       if state.mode == MODE_EDIT_STICKERS and net_id == state.net_cursor then
         ass_net_cursor:new_event()
         ass_net_cursor:pos(screen_x, screen_y)
@@ -594,6 +597,7 @@ add_keystring("seek", "<>")
 keymap["BS"] = {}
 keymap["ESC"] = {}
 keymap["TAB"] = {}
+keymap["Shift+TAB"] = {}
 
 for key, map in pairs(keymap) do
   for ctrl = 0, 1 do
@@ -623,6 +627,8 @@ for key, map in pairs(keymap) do
           end
         elseif state.mode == MODE_EDIT_STICKERS then
           if key == "TAB" then
+            state.mode = MODE_EDIT_MOVES
+          elseif key == "Shift+TAB" then
             state.mode = MODE_EDIT_BOUNDING_BOX
             mp.enable_key_bindings("bounding-box")
           elseif map["cursor_move"] then
