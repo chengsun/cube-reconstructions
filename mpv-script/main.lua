@@ -132,14 +132,26 @@ end
 
 local function serialise_bounding_box_events(bounding_box_events)
   assert(bounding_box_events)
-  local json = utils.format_json(bounding_box_events)
+  local serialisation = {events = {}}
+  for _, event in ipairs(events) do
+    table.insert(serialisation.events,
+                 { time = time_float_of_time_ms(event.time_ms),
+                   bounding_box = event.bounding_box })
+  end
+  local json = utils.format_json(serialisation)
   assert(json)
   return json
 end
 
 local function deserialise_bounding_box_events(serial_string)
-  local bounding_box_events = utils.parse_json(serial_string)
-  if bounding_box_events == nil then return nil end
+  local serialisation = utils.parse_json(serial_string)
+  if serialisation == nil then return nil end
+  local bounding_box_events = {}
+  for _, sevent in ipairs(serialisation.events) do
+    table.insert(bounding_box_events,
+                 { time_ms = time_ms_of_time_float(sevent.time),
+                   bounding_box = sevent.bounding_box })
+  end
   table.sort(bounding_box_events, event_time_ms_lt)
   return bounding_box_events
 end
@@ -170,7 +182,7 @@ local function handle_load()
     local serial_string = file:read("*all")
     file:close()
     local bounding_box_events = deserialise_bounding_box_events(serial_string)
-    if events ~= nil then
+    if bounding_box_events ~= nil then
       state.bounding_box_events = bounding_box_events
     end
   end
@@ -271,6 +283,7 @@ end
 -- returns bounding_box, idx_le
 local function bounding_box_get_lerp(time_ms)
   local idx_le = binary_search_last_le(state.bounding_box_events, time_ms)
+  msg.info(idx_le, utils.to_string(state.bounding_box_events[idx_le]))
   local event_le = state.bounding_box_events[idx_le]
   local time_ms_le = event_le.time_ms
   local bounding_box
@@ -399,7 +412,6 @@ local function add_keystring(name, str)
     table.insert(keymap[c], name)
     keymap[c][name] = true
   end
-  msg.info(utils.to_string(keymap))
 end
 
 local function escape_ass(s)
@@ -409,8 +421,6 @@ end
 local ass_of_colour = { W = "FFFFFF", R = "0000FF", G = "00FF00", B = "FF0000", O = "0080FF", Y = "00FFFF" }
 
 local function tick()
-  msg.trace("tick")
-
   local screen_width, screen_height, aspect = mp.get_osd_size()
   state.video_width = mp.get_property("width") or state.video_width or screen_width
   state.video_height = mp.get_property("height") or state.video_height or screen_height
@@ -508,6 +518,7 @@ local function tick()
 
     -- bounding box
     local bounding_box, idx = bounding_box_get_lerp(state.playback_time_ms)
+    msg.info(utils.to_string(bounding_box))
     ass_bounding_box:new_event()
     ass_bounding_box:pos(screen_x_of_video_x(bounding_box.x), screen_y_of_video_y(bounding_box.y))
     ass_bounding_box:draw_start()
@@ -516,7 +527,7 @@ local function tick()
     else
       ass_bounding_box:append("{\\1c&H808080&\\3c&H808080&}")
     end
-    ass_bounding_box:append(string.format("\\1a&HFF&\\3a&H80&\\bord%.1f}", 0.2 * SCALE))
+    ass_bounding_box:append(string.format("{\\1a&HFF&\\3a&H80&\\bord%.1f}", 0.2 * SCALE))
     ass_bounding_box:rect_cw(
       -screen_x_of_video_x(bounding_box.w) / 2,
       -screen_y_of_video_y(bounding_box.h) / 2,
@@ -524,7 +535,7 @@ local function tick()
       screen_y_of_video_y(bounding_box.h) / 2)
     if state.mode == MODE_EDIT_BOUNDING_BOX then
       local centre_size = 0.2 * SCALE
-      ass_bounding_box:append("\\1a&H80&\\3a&HFF&\\bord0}")
+      ass_bounding_box:append("{\\1a&H80&\\3a&HFF&\\bord0}")
       ass_bounding_box:rect_cw(-centre_size, -centre_size, centre_size, centre_size)
     end
     ass_bounding_box:draw_stop()
@@ -597,7 +608,6 @@ for key, map in pairs(keymap) do
         keystring = "ctrl+" .. keystring
       end
       function handler (e)
-        msg.info("process_key", keystring, utils.to_string(map))
         if map["seek"] then
           handle_seek(key)
         elseif state.mode == MODE_EDIT_MOVES then
@@ -638,12 +648,11 @@ end
 mp.add_forced_key_binding("Ctrl+s", nil, handle_save)
 
 local function process_mouse_event(source, action)
-  msg.info("process_mouse_event", source, action)
+  --msg.info("process_mouse_event", source, action)
 end
 
 local function process_playback_time(name, val)
   local media_filename = mp.get_property("path")
-  msg.trace("process_playback_time", name, val, media_filename)
   if media_filename ~= state.media_filename then
     msg.info("reset state: change of filename")
     state_reset()
