@@ -133,7 +133,7 @@ end
 local function serialise_bounding_box_events(bounding_box_events)
   assert(bounding_box_events)
   local serialisation = {events = {}}
-  for _, event in ipairs(events) do
+  for _, event in ipairs(bounding_box_events) do
     table.insert(serialisation.events,
                  { time = time_float_of_time_ms(event.time_ms),
                    bounding_box = event.bounding_box })
@@ -197,6 +197,8 @@ local function handle_save()
     events_file:write(serialise_events(state.events))
     bounding_box_file:write(serialise_bounding_box_events(state.bounding_box_events))
     mp.osd_message("Saved", 1.0)
+  else
+    mp.osd_message("Failed to save", 1.0)
   end
   if events_file ~= nil then events_file:close() end
   if bounding_box_file ~= nil then bounding_box_file:close() end
@@ -283,7 +285,6 @@ end
 -- returns bounding_box, idx_le
 local function bounding_box_get_lerp(time_ms)
   local idx_le = binary_search_last_le(state.bounding_box_events, time_ms)
-  msg.info(idx_le, utils.to_string(state.bounding_box_events[idx_le]))
   local event_le = state.bounding_box_events[idx_le]
   local time_ms_le = event_le.time_ms
   local bounding_box
@@ -492,8 +493,8 @@ local function tick()
       local net_face_local_x, net_face_local_y = cubelib.face_local_coord_of_face_local_id(net_face_local_id)
       local net_face_net_x, net_face_net_y = face_net_position_of_face_id(net_face_id)
       local gap = 0.3
-      --local offset_x = screen_width - 1.5 * SCALE * (4 * (3 + gap) - gap)
-      local offset_x = 0
+      local offset_x = screen_width - 1.5 * SCALE * (4 * (3 + gap) - gap)
+      --local offset_x = 0
       local screen_x = offset_x + 1.5 * SCALE * (net_face_net_x * (3 + gap) + 1.5 + net_face_local_x)
       local screen_y = 1.5 * SCALE * ((2 - net_face_net_y) * (3 + gap) + 1.5 - net_face_local_y)
       if state.mode == MODE_EDIT_STICKERS and net_id == state.net_cursor then
@@ -521,7 +522,6 @@ local function tick()
 
     -- bounding box
     local bounding_box, idx = bounding_box_get_lerp(state.playback_time_ms)
-    msg.info(utils.to_string(bounding_box))
     ass_bounding_box:new_event()
     ass_bounding_box:pos(screen_x_of_video_x(bounding_box.x), screen_y_of_video_y(bounding_box.y))
     ass_bounding_box:draw_start()
